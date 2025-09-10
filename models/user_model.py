@@ -17,3 +17,6 @@ class User(Base):
     # relasi ke notification
     notifications = relationship("Notification", back_populates="user")
     
+    @property
+    def user_role_name(self):
+        return self.role.nama_role if self.role else None

@@ -1,15 +1,13 @@
 from.base import BaseModel, datetime
 
 class RoleBase(BaseModel):
-    type: str
+    nama_role: str
 
 class RoleCreate(RoleBase):
     pass
 
 class Role(RoleBase):
-    id: int
-    created_at: datetime
-    updated_at: datetime | None = None
+    id_role: int
 
     class Config:
         from_aattributes =True

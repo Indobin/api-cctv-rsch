@@ -1,0 +1,7 @@
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Juga abaikan file env contoh (opsional)
+!.env.example  # Pengecualian: file contoh tetap di-track

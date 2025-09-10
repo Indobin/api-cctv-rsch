@@ -14,7 +14,9 @@ class RoleRepository:
         return self.db.query(Role).filter(Role.nama_role == nama_role).first()
     
     def create(self, role: RoleCreate):
-        db_role = Role(**role.dict())
+        db_role = Role(
+            nama_role = role.nama_role
+        )
         self.db.add(db_role)
         self.db.commit()
         self.db.refresh(db_role)
