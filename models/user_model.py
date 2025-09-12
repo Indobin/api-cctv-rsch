@@ -1,10 +1,10 @@
-from.base import Base, Column, Integer, String, ForeignKey, DateTime, relationship, func
+from.base import Base, Column, Integer, String, BigInteger,  ForeignKey, DateTime, relationship, func
 
 class User(Base):
     __tablename__ = "users"
     id_user = Column(Integer, primary_key=True, index=True)
     nama = Column(String(200), index=True)
-    nip = Column(String(20), unique=True)
+    nip = Column(BigInteger, unique=True)
     username = Column(String(200), unique=True)
     password = Column(String(255))
     id_role = Column(Integer, ForeignKey("role.id_role"))

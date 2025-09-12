@@ -1,9 +1,9 @@
-from.base import BaseModel, datetime, Optional, Field, field_validator
+from.base import BaseModel, datetime, Optional, Field, field_validator, ConfigDict
 from .role_schemas import Role
 
 class UserBase(BaseModel):
     nama: str = Field(min_length=5, max_length=200)
-    nip: str = Field(min_length=10, max_length=20)
+    nip: int = Field(gt=0 )
     username: str = Field(min_length=6, max_length=200)
 
 class UserCreate(UserBase):
@@ -11,14 +11,14 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     nama: Optional[str] = Field(None,min_length=5, max_length=200)
-    nip: Optional[str] = Field(None, min_length=10, max_length=20)
+    nip: Optional[int] = Field(None, gt=0 )
     username: Optional[str] = Field(min_length=6, max_length=200)
     password: Optional[str] = Field(None,min_length=6, max_length=255)
 
 class UserDelete(BaseModel):
-    message: str
+    # message: str
     deleted_at: Optional[datetime] = None
-
+    model_config = ConfigDict(from_attributes=True)
 class UserResponse(UserBase):
     id_user: int
     id_role: int

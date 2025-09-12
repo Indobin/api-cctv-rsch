@@ -1,5 +1,8 @@
 from.base import Session, User, CryptContext, UserCreate, UserUpdate, Role
+from sqlalchemy import func
 from datetime import datetime
+from zoneinfo import ZoneInfo
+from core.security import verify_password
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -16,10 +19,12 @@ class UserRepository:
                 User.username,
                 User.id_role,
                 Role.nama_role.label("user_role_name"),  
-                User.created_at,
-                User.updated_at,
+                func.to_char(func.timezone('Asia/Jakarta', User.created_at), 'YYYY-MM-DD HH24:MI:SS').label("created_at"),
+                func.to_char(func.timezone('Asia/Jakarta', User.updated_at), 'YYYY-MM-DD HH24:MI:SS').label("updated_at"),
+                func.to_char(func.timezone('Asia/Jakarta', User.deleted_at), 'YYYY-MM-DD HH24:MI:SS').label("deleted_at"),
             )
             .join(Role, User.id_role == Role.id_role)
+            .where(User.deleted_at == None)
             .offset(skip)
             .limit(limit)
             .all()
@@ -28,6 +33,9 @@ class UserRepository:
     def get_by_username(self, username: str):
         return self.db.query(User).filter(User.username == username).first()
     
+    def get_by_usernameL(self, username: str):
+        return self.db.query(User).filter(User.username == username).where(User.deleted_at == None).first()
+
     def get_by_nip(self, nip: str):
         return self.db.query(User).filter(User.nip == nip).first()
     
@@ -79,10 +87,54 @@ class UserRepository:
         db_user = self.get_by_id(user_id)
         if not db_user:
             return None
-        db_user.deleted_at = datetime.utcnow() 
+        utc_now = datetime.now(ZoneInfo("UTC"))
+        db_user.deleted_at = utc_now
         self.db.commit()
         self.db.refresh(db_user)
         return db_user
     
+    
+    def get_all_for_export(self):
+        return (
+            self.db.query(
+                User.nama,
+                User.nip,
+                User.username, 
+            )
+            .join(Role, User.id_role == Role.id_role)
+            .where(User.id_role == 2)
+            .all()
+    )
+
+    def upsert_bulk(self, users: list[dict]):
+        results = []
+        for data in users:
+            existing = (
+                self.db.query(User)
+                .filter((User.nip == data["nip"]) | (User.username == data["username"]))
+                .first()
+            )
+            if existing:
+                existing.nama = data.get("nama", existing.nama)
+                existing.nip = data.get("nip", existing.nip)
+                existing.username = data.get("username", existing.username)
+
+                if "password" in data and data["password"]:
+                    existing.password = pwd_context.hash(data["password"])
+                results.append(existing)
+            else:
+                new_user = User(
+                    nama=data["nama"],
+                    nip=data["nip"],
+                    username=data["username"],
+                    password=pwd_context.hash(data["password"]) if "password" in data else None,
+                    id_role=data.get("id_role", 2),
+                )
+                self.db.add(new_user)
+                results.append(new_user)
+
+        self.db.commit()
+        return results
+
 
         
