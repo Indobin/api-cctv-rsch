@@ -1,0 +1,142 @@
+from.base import Session, CctvCamera, Location, CctvCreate
+from sqlalchemy import func
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+class CctvRepository:
+    def __init__(self, db:Session):
+        self.db = db
+
+    def get_all(self, skip: int = 0, limit: int = 50):
+        return(
+            self.db.query(
+                CctvCamera.id_cctv,
+                CctvCamera.titik_letak,
+                CctvCamera.status,
+                CctvCamera.ip_address,
+                CctvCamera.is_streaming,
+                CctvCamera.id_location,
+                Location.nama_lokasi.label("cctv_location_name"),  
+                func.to_char(func.timezone('Asia/Jakarta', CctvCamera.created_at), 'YYYY-MM-DD HH24:MI:SS').label("created_at"),
+                func.to_char(func.timezone('Asia/Jakarta', CctvCamera.updated_at), 'YYYY-MM-DD HH24:MI:SS').label("updated_at"),
+                func.to_char(func.timezone('Asia/Jakarta', CctvCamera.deleted_at), 'YYYY-MM-DD HH24:MI:SS').label("deleted_at"),
+            )
+            .join(Location, CctvCamera.id_location == Location.id_location)
+            .where(CctvCamera.deleted_at == None)
+            .offset(skip)
+            .limit(limit)
+            .all()
+    )
+
+    
+    def get_by_position(self, titik_letak: str):
+        return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).first()
+
+    def get_by_positionL(self, titik_letak: str):
+        return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).where(CctvCamera.deleted_at == None).first()
+    
+    def get_by_ip(self, ip_address: str):
+        return self.db.query(CctvCamera).filter(CctvCamera.ip_address == ip_address).first()
+    
+    def get_by_id(self, id_cctv: int):
+        return self.db.query(CctvCamera).filter(CctvCamera.id_cctv == id_cctv).first()
+    
+    def get_by_stream_key(self, stream_key: str):
+        return self.db.query(CctvCamera).filter(CctvCamera.stream_key == stream_key).first()
+
+    def create(self, cctv_data: dict):
+        db_cctv = CctvCamera(**cctv_data)
+        self.db.add(db_cctv)
+        self.db.commit()
+        self.db.refresh(db_cctv)
+        return db_cctv
+    
+    def update_streaming_status(self, cctv_id: int, is_streaming: bool):
+        cctv = self.get_by_id(cctv_id)
+        if cctv:
+            cctv.is_streaming = is_streaming
+            self.db.commit()
+            self.db.refresh(cctv)
+        return cctv
+    # def update(self, user_id: int, cctv: UserUpdate):
+    #     db_cctv = self.get_by_id(user_id)
+    #     if not db_cctv:
+    #         return None
+        
+    #     if cctv.nama:
+    #         db_cctv.nama = cctv.nama
+    #     if cctv.nip:
+    #         db_cctv.nip = cctv.nip
+    #     if cctv.username:
+    #         db_cctv.username = cctv.username
+    #     if cctv.password:
+    #         db_cctv.hashed_password = pwd_context.hash(cctv.password)
+        
+    #     self.db.commit()
+    #     self.db.refresh(db_cctv)
+    #     return db_cctv
+    
+    # def hard_delete(self, user_id: int):
+    #     db_cctv = self.get_by_id(user_id)
+    #     if not db_cctv:
+    #         return None
+        
+    #     self.db.delete(db_cctv)
+    #     self.db.commit()
+    #     return db_cctv
+    
+    # def soft_delete(self, user_id:int):
+    #     db_cctv = self.get_by_id(user_id)
+    #     if not db_cctv:
+    #         return None
+    #     utc_now = datetime.now(ZoneInfo("UTC"))
+    #     db_cctv.deleted_at = utc_now
+    #     self.db.commit()
+    #     self.db.refresh(db_cctv)
+    #     return db_cctv
+    
+    
+    # def get_all_for_export(self):
+    #     return (
+    #         self.db.query(
+    #             CctvCamera.nama,
+    #             CctvCamera.nip,
+    #             CctvCamera.username, 
+    #         )
+    #         .join(Location, CctvCamera.id_location == Location.id_location)
+    #         .where(CctvCamera.id_location == 2)
+    #         .all()
+    # )
+
+    # def upsert_bulk(self, users: list[dict]):
+    #     results = []
+    #     for data in users:
+    #         existing = (
+    #             self.db.query(CctvCamera)
+    #             .filter((CctvCamera.nip == data["nip"]) | (CctvCamera.username == data["username"]))
+    #             .first()
+    #         )
+    #         if existing:
+    #             existing.nama = data.get("nama", existing.nama)
+    #             existing.nip = data.get("nip", existing.nip)
+    #             existing.username = data.get("username", existing.username)
+
+    #             if "password" in data and data["password"]:
+    #                 existing.password = pwd_context.hash(data["password"])
+    #             results.append(existing)
+    #         else:
+    #             new_user = CctvCamera(
+    #                 nama=data["nama"],
+    #                 nip=data["nip"],
+    #                 username=data["username"],
+    #                 password=pwd_context.hash(data["password"]) if "password" in data else None,
+    #                 id_location=data.get("id_location", 2),
+    #             )
+    #             self.db.add(new_user)
+    #             results.append(new_user)
+
+    #     self.db.commit()
+    #     return results
+
+
+        
