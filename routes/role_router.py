@@ -21,8 +21,8 @@ def read_role(
 ):
     return service.get_all_role(skip, limit)
 
-@router.post("/create", response_model=Role)
-def create_user(
+@router.post("/", response_model=Role)
+def create_role(
     role: RoleCreate,
     db: Session = Depends(get_db),
     service: RoleService = Depends(get_role_service),
