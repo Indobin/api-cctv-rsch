@@ -51,6 +51,13 @@ class CctvRepository:
         self.db.refresh(db_cctv)
         return db_cctv
     
+    def update(self, db_cctv: CctvCamera, update_data: dict):
+        for field, value in update_data.items():
+            setattr(db_cctv, field, value)
+        self.db.commit()
+        self.db.refresh(db_cctv)
+        return db_cctv
+
     def update_streaming_status(self, cctv_id: int, is_streaming: bool):
         cctv = self.get_by_id(cctv_id)
         if cctv:

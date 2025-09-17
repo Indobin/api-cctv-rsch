@@ -1,36 +1,127 @@
 from repositories.cctv_repository import CctvRepository
-from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse
+from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse, StreamUrlsResponse
 from fastapi import HTTPException, status, UploadFile
+from services.mediamtx_service import MediaMTXService
 import pandas as pd
+import uuid
 class CctvService:
 
         
-    RTSP_URL_TEMPLATE = "rtsp://admin:admin123@{ip_address}:554/cam/realmonitor?channel=1&subtype=0"
+    # RTSP_URL_TEMPLATE = "rtsp://admin:admin123@{ip_address}:554/cam/realmonitor?channel=1&subtype=0"
 
     def __init__(self, cctv_repository: CctvRepository):
         self.cctv_repository = cctv_repository
+        self.mediamtxm_service = MediaMTXService()
 
     def get_all_cctv(self, skip: int = 0, limit: int = 50 ):
-        users = self.cctv_repository.get_all(skip, limit)
-        return [CctvResponse.from_orm(u) for u in users]
+        cctvs = self.cctv_repository.get_all(skip, limit)
+        result = []
+        for cctv in cctvs:
+            cctv_dict = dict(cctv._mapping)
+            # Tambahkan URL stream
+            if cctv_dict.get('stream_key'):
+                cctv_dict['rtsp_url'] = f"rtsp://{self.mediamtxm_service.host}:{self.mediamtxm_service.rtsp_port}/{cctv_dict['stream_key']}"
+                cctv_dict['hls_url'] = f"http://{self.mediamtxm_service.host}:{self.mediamtxm_service.http_port}/{cctv_dict['stream_key']}/index.m3u8"
+            result.append(CctvResponse(**cctv_dict))
+        return result
     
     def create_cctv(self, cctv: CctvCreate):
         exiting_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
-        exiting_position = self.cctv_repository.get_by_position(cctv.titik_letak)
         if exiting_ip:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Ip Address sudah ada"
             )
+        exiting_position = self.cctv_repository.get_by_position(cctv.titik_letak)
         if exiting_position:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Titik letak sudah ada"
             )
-        rtsp_url_otomatis = self.RTSP_URL_TEMPLATE.format(ip_address=cctv.ip_address)
-        cctv.ip_address = rtsp_url_otomatis
-        return self.cctv_repository.create(cctv)
+        
+        # Generate stream key
+        stream_key = f"cctv_{uuid.uuid4().hex[:8]}"
+        
+        # Buat data CCTV
+        cctv_data = {
+            "titik_letak": cctv.titik_letak,
+            "ip_address": cctv.ip_address,
+            "status": cctv.status,
+            "id_location": cctv.id_location,
+            "stream_key": stream_key,
+            "is_streaming": False
+        }
+
+        db_cctv = self.cctv_repository.create(cctv_data)
+
+        # Setup stream di MediaMTX
+    #     stream_urls = self.mediamtxm_service.setup_stream(db_cctv.id_cctv, cctv.ip_address)
+
+    #     if stream_urls:
+    #         self.cctv_repository.update(db_cctv,  {"stream_key": stream_urls["stream_key"]})
+
+    #         # Tambahkan URL ke response
+    #         response = CctvResponse.from_orm(db_cctv)
+    #         response.rtsp_url = stream_urls["rtsp_url"]
+    #         response.hls_url = stream_urls["hls_url"]
+    #         return response
+    #     else:
+    #         # Jika gagal setup stream, hapus CCTV
+    #         self.cctv_repository.db.delete(db_cctv)
+    #         self.cctv_repository.db.commit()
+    #         raise HTTPException(
+    #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    #             detail="Gagal setup stream di media server"
+    #         )
+        
+    # def get_stream_urls(self, cctv_id: int):
+    #     cctv = self.cctv_repository.get_by_id(cctv_id)
+    #     if not cctv:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_404_NOT_FOUND,
+    #             detail="CCTV tidak ditemukan"
+    #         )
+        
+    #     if not cctv.stream_key:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_400_BAD_REQUEST,
+    #             detail="CCTV belum dikonfigurasi untuk streaming"
+    #         )
+        
+    #     # Periksa status stream
+    #     is_streaming = self.mediamtxm_service.get_stream_status(cctv.stream_key)
+    #     self.cctv_repository.update_streaming_status(cctv_id, is_streaming)
+
+    #     return StreamUrlsResponse(
+    #         cctv_id=cctv.id_cctv,
+    #         stream_key=cctv.stream_key,
+    #         rtsp_url=f"rtsp://{self.mediamtxm_service.host}:{self.mediamtxm_service.rtsp_port}/{cctv.stream_key}",
+    #         hls_url=f"http://{self.mediamtxm_service.host}:{self.mediamtxm_service.http_port}/{cctv.stream_key}/index.m3u8",
+    #         is_streaming=is_streaming
+    #     )
     
+    def delete_cctv(self, cctv_id: int):
+        """Hapus CCTV dan streamnya"""
+        cctv = self.cctv_repository.get_by_id(cctv_id)
+        if not cctv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="CCTV tidak ditemukan"
+            )
+        
+        # Hapus stream dari MediaMTX jika ada
+        if cctv.stream_key:
+            self.mediamtx_service.remove_stream(cctv.stream_key)
+        
+        # Soft delete dari database
+        self.cctv_repository.update(cctv, {"deleted_at": datetime.now()})
+        
+        return {"message": "CCTV berhasil dihapus"}
+
+    def get_all_streams_status(self):
+        """Dapatkan status semua stream"""
+        streams = self.mediamtx_service.get_all_streams()
+        return streams
     # def update_user(self, user_id: int , cctv: UserUpdate):
     #     db_user = self.cctv_repository.get_by_id(user_id)
     #     if not db_user:
