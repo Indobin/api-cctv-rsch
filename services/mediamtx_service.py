@@ -2,103 +2,66 @@ import requests
 import logging
 from fastapi import HTTPException, status
 from core.config import settings
-
+from typing import Dict, Optional
+from requests.auth import HTTPBasicAuth
 logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("MediaMTXService")
+logger.setLevel(logging.INFO)
+
 
 class MediaMTXService:
     def __init__(self):
-        self.base_url = settings.MEDIAMTX_API_URL
-        self.base_url = settings.MEDIAMTX_API_USERNAME
-        self.password = settings.MEDIAMTX_API_PASSWORD
-        self.rtsp_port = settings.MEDIAMTX_RTSP_PORT
-        self.http_port = settings.MEDIAMTX_HTTP_PORT
-        self.host = settings.MEDIAMTX_HOST
-
-    def generate_rtsp_url(self, ip_address: str):
-        """Generate RTSP URL untuk CCTV Dahua"""
-        return f"rtsp://admin:admin123@{ip_address}:554/cam/realmonitor?channel=1&subtype=1"
-    
-    def setup_stream(self, cctv_id: int, ip_address:str):
-        """Setup stream di MediaMTX"""
-        stream_key = f"cctv_{cctv_id}"
-        rtsp_source_url = self.generate_rtsp_url(ip_address)
-
+        self.api_base_url = "http://127.0.0.1:9997/v3"
+        self.stream_base_url = "http://127.0.0.1:8888"
+        self.rtsp_port = 8554
+        self.http_port = 8888
+        
+    def test_mediamtx_connection(self) -> bool:
+        """Test koneksi ke MediaMTX API"""
         try:
-            # Konfigurasi path di MediaMTX
-            paylaod = {
-                "name": stream_key,
-                "source": "rtsp",
-                "sourceProtocol": "tcp",  # Gunakan TCP untuk stability
-                "sourceOnDemand": True,   # Stream hanya ketika ada yang menonton
-                "sourceRedirect": rtsp_source_url,
-                "maxReaders": 10,         # Maksimal 10 concurrent viewers
+            response = requests.get(f"{self.api_base_url}/config/global/get", timeout=5)
+            return response.status_code == 200
+        except Exception as e:
+            logger.warning(f"MediaMTX connection test failed: {e}")
+            return False
+    
+    def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
+        """Register stream ke MediaMTX"""
+        try:
+            path_config = {
+                "source": rtsp_source_url,
+                "sourceProtocol": "tcp",  # Important untuk Dahua
+                "sourceOnDemand": True,   # Save resources
+                # "readTimeout": "15s"
             }
-
-            response = requests.put(
-                f"{self.base_url}/v3/config/paths/add/{stream_key}",
-                json=paylaod,
-                auth=(self.username, self.password),
+            
+            response = requests.post(
+                f"{self.api_base_url}/config/paths/add/{stream_key}",
+                json=path_config,
                 timeout=10
             )
-
-            if response.status_code in [200, 201]:
-               return {
-                    "stream_key": stream_key,
-                    "rtsp_url": f"rtsp://{self.host}:{self.rtsp_port}/{stream_key}",
-                    "hls_url": f"http://{self.host}:{self.http_port}/{stream_key}/index.m3u8"
-                }
+            
+            if response.status_code == 200:
+                logger.info(f"Stream {stream_key} registered successfully")
+                return True
             else:
-                logger.error(f"MediaMTX setup failed: {response.status_code} - {response.text}")
-
-                return None
-        
-        except requests.exceptions.RequestException as e:
-            logger.error(f"MediaMTX connection error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Media server tidak dapat diakses"
-            )
+                logger.warning(f"Stream {stream_key} auto-create mode: {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"Stream {stream_key} will auto-create: {e}")
+            return False
     
-    def remove_stream(self, stream_key: str):
-        """Hapus stream dari MediaMTX"""
-        try:
-            response = requests.delete(
-                f"{self.base_url}/v3/config/paths/delete/{stream_key}",
-                auth=(self.username, self.password),
-                timeout=5
-            )
-            return response.status_code in [200, 204]
-        except requests.exceptions.RequestException as e:
-            logger.error(f"MediaMTX delete error: {e}")
-            return False
-        
-    def get_stream_status(self, stream_key: str):
-        """Dapatkan status stream dari MediaMTX"""
-        try:
-            response = requests.get(
-                f"{self.base_url}/v3/paths/get/{stream_key}",
-                auth=(self.username, self.password),
-                timeout=5
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("ready", False)
-            return False
-        except requests.exceptions.RequestException as e:
-            logger.error(f"MediaMTX status error: {e}")
-            return False
-
-    def get_all_streams(self):
-        """Dapatkan semua stream yang aktif di MediaMTX"""
-        try:
-            response = requests.get(
-                f"{self.base_url}/v3/paths/list",
-                auth=(self.username, self.password),
-                timeout=5
-            )
-            if response.status_code == 200:
-                return response.json()
-            return []
-        except requests.exceptions.RequestException as e:
-            logger.error(f"MediaMTX list error: {e}")
-            return []
+    def generate_stream_urls(self, stream_key: str) -> Dict[str, str]:
+        """Generate URLs untuk frontend"""
+        return {
+            "rtsp_url": f"rtsp://localhost:{self.rtsp_port}/{stream_key}",
+            "hls_url": f"http://localhost:{self.http_port}/{stream_key}/index.m3u8",
+            "webrtc_url": f"http://localhost:{self.http_port}/{stream_key}/webrtc"
+        }
+    
+    def generate_rtsp_source_url(self, ip_address: str, username: str = "admin", password: str = "admin123") -> str:
+        """Generate RTSP source URL untuk CCTV Dahua dengan format yang diberikan"""
+        # Format: rtsp://admin:admin123@192.168.10.201:554/cam/realmonitor?channel=1&subtype=1
+        return f"rtsp://{username}:{password}@{ip_address}:554/cam/realmonitor?channel=1&subtype=1"

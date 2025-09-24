@@ -37,7 +37,7 @@ class CctvRepository:
     
     def get_by_ip(self, ip_address: str):
         return self.db.query(CctvCamera).filter(CctvCamera.ip_address == ip_address).first()
-    
+
     def get_by_id(self, id_cctv: int):
         return self.db.query(CctvCamera).filter(CctvCamera.id_cctv == id_cctv).first()
     

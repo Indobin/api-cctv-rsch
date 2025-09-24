@@ -1,22 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from database import get_db
-from schemas.cctv_schemas import CctvResponse, CctvCreate, StreamUrlsResponse
+from schemas.cctv_schemas import CctvCreate, StreamUrlsResponse, SuccessResponse
 from repositories.cctv_repository import CctvRepository
+from repositories.location_repository import LocationRepository
 from services.cctv_service import CctvService
 from core.auth import get_superadmin
 from core.response import success_response
-import subprocess
-import os
-import uuid
-from typing import List
+import requests
 
 router = APIRouter(prefix="/cctv", tags=["cctv"])
 
 
 def get_cctv_service(db: Session = Depends(get_db)):
     cctv_repository = CctvRepository(db)
-    return CctvService(cctv_repository)
+    location_repository = LocationRepository(db)
+    return CctvService(cctv_repository, location_repository)
 
 @router.get("/")
 def read_cctv(
@@ -45,7 +45,7 @@ def create_cctv(
             data=new_cctv
         )
 
-@router.get("/{cctv_id}/stream", response_model=StreamUrlsResponse)
+@router.get("/{cctv_id}/stream")
 def get_cctv_stream(
     cctv_id: int,
     service: CctvService = Depends(get_cctv_service),
@@ -69,13 +69,16 @@ def delete_cctv(
         data=None
     )
 
-@router.get("/monitor/streams")
-def get_all_streams_status(
-    service: CctvService = Depends(get_cctv_service),
-    current_admin = Depends(get_superadmin)
+@router.get("/{cctv_id}/test")
+def test_cctv_connection(
+    cctv_id: int,
+    db: Session = Depends(get_db),
+    current_admin = Depends(get_superadmin),
+    service: CctvService = Depends(get_cctv_service)
 ):
-    streams = service.get_all_streams_status()
+    test_result = service.test_cctv_connection(cctv_id)
+    
     return success_response(
-        message="Stream status retrieved successfully",
-        data=streams
+        message="Connection test completed",
+        data=test_result
     )
