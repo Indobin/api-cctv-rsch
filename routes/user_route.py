@@ -36,7 +36,7 @@ def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
     service: UserService = Depends(get_user_service),
-    current_admin = Depends(get_superadmin)
+    # current_admin = Depends(get_superadmin)
 ):
     new_user = service.create_user(user)
     return success_response("User berhasil dibuat", UserResponse.from_orm(new_user))

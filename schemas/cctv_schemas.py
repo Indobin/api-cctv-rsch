@@ -37,3 +37,13 @@ class StreamUrlsResponse(BaseModel):
     rtsp_url: str
     hls_url: str
     is_streaming: bool
+    class Config:
+        from_attributes = True
+
+# Buat schema untuk success response wrapper
+class SuccessResponse(BaseModel):
+    status: str = "success"
+    message: str
+    data: Optional[StreamUrlsResponse] = None  # Bisa juga menggunakan Union jika multiple types
+
+    model_config = ConfigDict(from_attributes=True)
