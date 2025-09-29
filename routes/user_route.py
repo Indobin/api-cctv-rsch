@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from database import get_db
@@ -6,7 +6,6 @@ from schemas.user_schemas import UserResponse, UserCreate, UserUpdate, UserDelet
 from repositories.user_repository import UserRepository
 from services.user_service import UserService
 from core.auth import superadmin_role
-from typing import List
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -51,7 +50,6 @@ def update_user(
     updated = service.update_user(user_id, user)
     return success_response("User berhasil diperbarui", UserResponse.from_orm(updated))
 
-
 @router.delete("/soft/{user_id}", response_model=dict)
 def soft_delete_user(
     user_id: int,
@@ -69,20 +67,25 @@ def hard_delete_user(
 ):
     deleted = service.hard_delete_user(user_id)
     return success_response("User berhasil di-hard delete", UserDelete.from_orm(deleted))
+
 @router.get("/export")
 def export_users(
-    file_type: str = "csv",
+    file_type: str = "xlsx",
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ):
     file_path = service.export_users(file_type)
     return FileResponse(file_path, filename=f"users.{file_type}")
 
-@router.post("/import", response_model=dict)
+@router.post("/import")
 def import_users(
-    file: UploadFile,
+    file: UploadFile = File(...),
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ):
-    result = service.import_users(file)
-    return success_response(f"{len(result)} pengguna berhasil diimport", result)
+    rows = service.parse_import_user(file)
+    imported = service.import_bulk(rows)
+    return {
+        "status": "success",
+        "imported_count": len(imported),
+    }

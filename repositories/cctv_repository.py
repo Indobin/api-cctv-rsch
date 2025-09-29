@@ -103,35 +103,7 @@ class CctvRepository:
             .all()
     )
 
-    # def upsert_bulk(self, users: list[dict]):
-    #     results = []
-    #     for data in users:
-    #         existing = (
-    #             self.db.query(CctvCamera)
-    #             .filter((CctvCamera.nip == data["nip"]) | (CctvCamera.username == data["username"]))
-    #             .first()
-    #         )
-    #         if existing:
-    #             existing.nama = data.get("nama", existing.nama)
-    #             existing.nip = data.get("nip", existing.nip)
-    #             existing.username = data.get("username", existing.username)
-
-    #             if "password" in data and data["password"]:
-    #                 existing.password = pwd_context.hash(data["password"])
-    #             results.append(existing)
-    #         else:
-    #             new_user = CctvCamera(
-    #                 nama=data["nama"],
-    #                 nip=data["nip"],
-    #                 username=data["username"],
-    #                 password=pwd_context.hash(data["password"]) if "password" in data else None,
-    #                 id_location=data.get("id_location", 2),
-    #             )
-    #             self.db.add(new_user)
-    #             results.append(new_user)
-
-    #     self.db.commit()
-    #     return results
+    
 
 
         

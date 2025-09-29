@@ -70,6 +70,11 @@ class UserService:
         data = self.user_repository.get_all_for_export()
         df = pd.DataFrame([dict(row._mapping) for row in data])
 
+        df.rename(columns={
+            "nama": "Nama",
+            "username": "Username",
+            "nip": "Nip"
+        }, inplace=True)
         if file_type == "csv":
             file_path = "users_export.csv"
             df.to_csv(file_path, index=False)
@@ -79,6 +84,50 @@ class UserService:
 
         return file_path
     
+    @staticmethod
+    def parse_import_user(uploaded_file):
+        import pandas as pd
+        from io import BytesIO
+
+        contents = uploaded_file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+
+        rows = []
+        for _, row in df.iterrows():
+            rows.append({
+                "nama": row.get("Nama"),
+                "username": row.get("Username"),
+                "nip": row.get("Nip"),
+                "password": row.get("Password"),
+            })
+        return rows
+    
+    def import_bulk(self, rows: list[dict]):
+        
+        imported_users = []
+
+        for row in rows:
+            existing_username = self.user_repository.get_by_usernameL(row["username"])
+            if existing_username:
+                continue
+            existing_nip = self.user_repository.get_by_nip(row["nip"])
+            if existing_nip:
+                continue
+
+            user_data = {
+                "nama": row["nama"],
+                "username": row["username"],
+                "nip": row["nip"],
+                "password": row["password"]
+                # "id_role": 2
+            }
+
+            user = UserCreate(**user_data)
+            user = self.user_repository.create(user)
+            imported_users.append(user)
+
+        return imported_users
+
     def import_users(self, file: UploadFile):
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file.file)

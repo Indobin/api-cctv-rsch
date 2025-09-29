@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 from database import get_db
 from schemas.cctv_schemas import CctvCreate, CctvUpdate, StreamUrlsResponse, SuccessResponse
@@ -101,3 +101,21 @@ def export_cctv(
 ):
     file_path = service.export_cctv(file_type)
     return FileResponse(file_path, filename=f"cctv.{file_type}")
+
+@router.post("/import")
+def import_cctv(
+    file: UploadFile = File(...),
+    service: CctvService = Depends(get_cctv_service),
+    user_role = Depends(all_roles),
+):
+    
+    # parsing Excel
+    rows = service.parse_import_cctv(file)
+
+    # import ke DB
+    imported = service.import_bulk(rows)
+
+    return {
+        "status": "success",
+        "imported_count": len(imported),
+    }
