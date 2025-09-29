@@ -6,7 +6,6 @@ class CctvCamera(Base):
     id_cctv = Column(Integer, primary_key=True)
     titik_letak = Column(String)
     ip_address = Column(String)
-    status = Column(Boolean)
     stream_key = Column(String, unique=True)
     is_streaming = Column(Boolean, default=False)
     id_location = Column(Integer, ForeignKey("location.id_location"))

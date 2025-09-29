@@ -12,7 +12,6 @@ class CctvRepository:
             self.db.query(
                 CctvCamera.id_cctv,
                 CctvCamera.titik_letak,
-                CctvCamera.status,
                 CctvCamera.ip_address,
                 CctvCamera.is_streaming,
                 CctvCamera.id_location,
@@ -44,6 +43,9 @@ class CctvRepository:
     def get_by_stream_key(self, stream_key: str):
         return self.db.query(CctvCamera).filter(CctvCamera.stream_key == stream_key).first()
 
+    def get_by_location(self, id_location: int):
+        return self.db.query(CctvCamera).filter(CctvCamera.id_location == id_location).where(CctvCamera.deleted_at == None)
+
     def create(self, cctv_data: dict):
         db_cctv = CctvCamera(**cctv_data)
         self.db.add(db_cctv)
@@ -51,7 +53,10 @@ class CctvRepository:
         self.db.refresh(db_cctv)
         return db_cctv
     
-    def update(self, db_cctv: CctvCamera, update_data: dict):
+    def update(self, cctv_id: int, update_data: dict):
+        db_cctv = self.get_by_id(cctv_id)
+        if not db_cctv:
+            return None
         for field, value in update_data.items():
             setattr(db_cctv, field, value)
         self.db.commit()
@@ -65,23 +70,6 @@ class CctvRepository:
             self.db.commit()
             self.db.refresh(cctv)
         return cctv
-    # def update(self, user_id: int, cctv: UserUpdate):
-    #     db_cctv = self.get_by_id(user_id)
-    #     if not db_cctv:
-    #         return None
-        
-    #     if cctv.nama:
-    #         db_cctv.nama = cctv.nama
-    #     if cctv.nip:
-    #         db_cctv.nip = cctv.nip
-    #     if cctv.username:
-    #         db_cctv.username = cctv.username
-    #     if cctv.password:
-    #         db_cctv.hashed_password = pwd_context.hash(cctv.password)
-        
-    #     self.db.commit()
-    #     self.db.refresh(db_cctv)
-    #     return db_cctv
     
     # def hard_delete(self, user_id: int):
     #     db_cctv = self.get_by_id(user_id)
@@ -103,17 +91,17 @@ class CctvRepository:
     #     return db_cctv
     
     
-    # def get_all_for_export(self):
-    #     return (
-    #         self.db.query(
-    #             CctvCamera.nama,
-    #             CctvCamera.nip,
-    #             CctvCamera.username, 
-    #         )
-    #         .join(Location, CctvCamera.id_location == Location.id_location)
-    #         .where(CctvCamera.id_location == 2)
-    #         .all()
-    # )
+    def get_all_for_export(self):
+        return (
+            self.db.query(
+                CctvCamera.titik_letak,
+                CctvCamera.ip_address,
+                Location.nama_lokasi.label("cctv_location_name"),  
+            )
+            .join(Location, CctvCamera.id_location == Location.id_location)
+            .where(CctvCamera.deleted_at == None)
+            .all()
+    )
 
     # def upsert_bulk(self, users: list[dict]):
     #     results = []
