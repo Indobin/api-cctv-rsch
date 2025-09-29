@@ -3,6 +3,7 @@ from repositories.location_repository import LocationRepository
 from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse, StreamUrlsResponse
 from fastapi import HTTPException, status, UploadFile
 from services.mediamtx_service import MediaMTXService
+from io import BytesIO
 import pandas as pd
 import asyncio
 import logging
@@ -236,7 +237,7 @@ class CctvService:
 
         df.rename(columns={
             'titik_letak': 'Titik Letak',
-            'ip_address': 'Ip Addres',
+            'ip_address': 'Ip Address',
             'cctv_location_name': 'Server Monitoring'
         }, inplace=True)
         if file_type == "csv":
@@ -248,48 +249,46 @@ class CctvService:
 
         return file_path
     
-    # def import_users(self, file: UploadFile):
-    #     if file.filename.endswith(".csv"):
-    #         df = pd.read_csv(file.file)
-    #     elif file.filename.endswith(".xlsx"):
-    #         df = pd.read_excel(file.file)
-    #     else:
-    #         raise HTTPException(status_code=400, detail="File harus CSV/XLSX")
+    @staticmethod
+    def parse_import_cctv(uploaded_file):
+        import pandas as pd
+        from io import BytesIO
 
-    #     required_columns = {"nama", "nip", "username"}
-    #     if not required_columns.issubset(set(df.columns)):
-    #         raise HTTPException(
-    #             status_code=status.HTTP_400_BAD_REQUEST,
-    #             detail=f"Kolom wajib {required_columns} tidak lengkap di file",
-    #         )
+        contents = uploaded_file.file.read()
+        df = pd.read_excel(BytesIO(contents))
 
-    #     # hapus row kosong
-    #     df = df.dropna(subset=["nama", "nip", "username"])
+        rows = []
+        for _, row in df.iterrows():
+            rows.append({
+                "titik_letak": row.get("Titik Letak"),
+                "ip_address": row.get("Ip Address"),
+                "server_monitoring": row.get("Server Monitoring"),
+            })
+        return rows
 
-    #     # konversi ke dict
-    #     users = df.to_dict(orient="records")
+    def import_bulk(self, rows: list[dict]):
+      
+        imported_cctvs = []
 
-    #         # validasi per-row
-    #     clean_users = []
-    #     for row in users:
-    #         try:
-    #             nama = str(row["nama"]).strip()
-    #             nip = int(row["nip"]).strip()
-    #             username = str(row["username"]).strip()
-    #             password = str(row["password"]).strip() if "password" in row and row["password"] else None
-    #             if not (nama and nip and username):
-    #                 continue  # skip row kosong
+        for row in rows:
+            lokasi = self.location_repository.get_by_name(row["server_monitoring"])
+            if not lokasi:
+                lokasi = self.location_repository.create(location=type("LocationCreate", (), {"nama_lokasi": row["server_monitoring"]}))
+            existing = self.cctv_repository.get_by_ip(row["ip_address"])
+            if existing:
+                continue  # kalau mau update, bisa ubah logic di sini
 
-    #             clean_users.append({
-    #                 "nama": nama,
-    #                 "nip": nip,
-    #                 "username": username,
-    #                 "password": password,
-    #             })
-    #         except Exception:
-    #             continue  # skip row error
+            # 3. Buat data cctv
+            stream_key = f"loc_{lokasi.id_location}_cam_{uuid.uuid4().hex[:8]}"
+            cctv_data = {
+                "titik_letak": row["titik_letak"],
+                "ip_address": row["ip_address"],
+                "stream_key": stream_key,
+                "id_location": lokasi.id_location,
+            }
 
-    #     results = self.cctv_repository.upsert_bulk(clean_users)
+            # 4. Simpan pakai repository
+            cctv = self.cctv_repository.create(cctv_data)
+            imported_cctvs.append(cctv)
 
-    #     return [UserResponse.from_orm(u) for u in results]
-
+        return imported_cctvs
