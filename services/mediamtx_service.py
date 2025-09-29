@@ -1,11 +1,8 @@
 import requests
 import logging
-from fastapi import HTTPException, status
-from core.config import settings
-from typing import Dict, Optional
-from requests.auth import HTTPBasicAuth
+import httpx
+from typing import Dict
 logger = logging.getLogger(__name__)
-
 logger = logging.getLogger("MediaMTXService")
 logger.setLevel(logging.INFO)
 
@@ -17,16 +14,17 @@ class MediaMTXService:
         self.rtsp_port = 8554
         self.http_port = 8888
         
-    def test_mediamtx_connection(self) -> bool:
+    async def test_mediamtx_connection(self) -> bool:
         """Test koneksi ke MediaMTX API"""
         try:
-            response = requests.get(f"{self.api_base_url}/config/global/get", timeout=5)
-            return response.status_code == 200
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(f"{self.api_base_url}/config/global/get")
+                return response.status_code == 200
         except Exception as e:
             logger.warning(f"MediaMTX connection test failed: {e}")
             return False
     
-    def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
+    async def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
         """Register stream ke MediaMTX"""
         try:
             path_config = {
@@ -35,13 +33,11 @@ class MediaMTXService:
                 "sourceOnDemand": True,   # Save resources
                 # "readTimeout": "15s"
             }
-            
-            response = requests.post(
-                f"{self.api_base_url}/config/paths/add/{stream_key}",
-                json=path_config,
-                timeout=10
-            )
-            
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.post(
+                    f"{self.api_base_url}/config/paths/add/{stream_key}",
+                    json=path_config,
+                )
             if response.status_code == 200:
                 logger.info(f"Stream {stream_key} registered successfully")
                 return True
@@ -53,12 +49,28 @@ class MediaMTXService:
             logger.warning(f"Stream {stream_key} will auto-create: {e}")
             return False
     
+    async def ensure_stream(self, stream_key: str, rtsp_source_url: str) -> bool:
+        """Pastikan stream ada, kalau belum → add"""
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    f"{self.api_base_url}/config/paths/get/{stream_key}",
+                )
+            if resp.status_code == 200:
+                logger.info(f"Stream {stream_key} already exists")
+                return True
+            else:
+                return await self.add_stream_to_mediamtx(stream_key, rtsp_source_url)
+        except Exception as e:
+            logger.error(f"Ensure stream error {stream_key}: {e}")
+            return False
+        
     def generate_stream_urls(self, stream_key: str) -> Dict[str, str]:
         """Generate URLs untuk frontend"""
         return {
-            "rtsp_url": f"rtsp://localhost:{self.rtsp_port}/{stream_key}",
+            # "rtsp_url": f"rtsp://localhost:{self.rtsp_port}/{stream_key}",
             "hls_url": f"http://localhost:{self.http_port}/{stream_key}/index.m3u8",
-            "webrtc_url": f"http://localhost:{self.http_port}/{stream_key}/webrtc"
+            # "webrtc_url": f"http://localhost:{self.http_port}/{stream_key}/webrtc"
         }
     
     def generate_rtsp_source_url(self, ip_address: str, username: str = "admin", password: str = "admin123") -> str:

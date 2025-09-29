@@ -24,7 +24,12 @@ def get_user(token: str, db: Session = Depends(get_db)):
         raise credentials_exception
     return user
 
-def get_superadmin(current_user = Depends(get_user)):
+def superadmin_role(current_user = Depends(get_user)):
     if current_user.id_role != 1:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    return current_user
+
+def all_roles(current_user = Depends(get_user)):
+    if current_user.id_role != 1 and current_user.id_role !=2:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return current_user

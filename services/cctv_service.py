@@ -4,10 +4,11 @@ from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse, StreamUrl
 from fastapi import HTTPException, status, UploadFile
 from services.mediamtx_service import MediaMTXService
 import pandas as pd
+import asyncio
 import logging
 from typing import Dict
 import uuid
-from typing import Dict
+from pydantic import ValidationError
 logger = logging.getLogger(__name__)
 
 class CctvService:  
@@ -16,7 +17,11 @@ class CctvService:
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
         self.mediamtx_service = MediaMTXService()
-    
+
+    def get_all_cctv(self, skip: int = 0, limit: int = 50 ):
+        users = self.cctv_repository.get_all(skip, limit)
+        return [CctvResponse.from_orm(u) for u in users]
+       
     def create_cctv(self, cctv: CctvCreate):
         existing_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
         if existing_ip:
@@ -40,13 +45,11 @@ class CctvService:
             )
         
         # Generate stream key untuk digunakan nanti
-        # stream_key = f"cctv_{uuid.uuid4().hex[:8]}"
         stream_key = f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
         # Buat data CCTV tanpa setup stream dulu
         cctv_data = {
             "titik_letak": cctv.titik_letak,
             "ip_address": cctv.ip_address,
-            "status": cctv.status,
             "id_location": cctv.id_location,
             "stream_key": stream_key,
             "is_streaming": False
@@ -65,18 +68,59 @@ class CctvService:
                 detail=f"Error saat membuat CCTV: {str(e)}"
             )
         
+    def update_cctv(self, cctv_id: int, cctv: CctvUpdate):
+        db_cctv = self.cctv_repository.get_by_id(cctv_id)
+        if not db_cctv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Id cctv tidak ditemukan"
+            )
+        if cctv.ip_address:
+            existing_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
+            if existing_ip and existing_ip.id_cctv != cctv_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="IP Address sudah ada"
+                )
+        if cctv.titik_letak:
+            existing_position = self.cctv_repository.get_by_position(cctv.titik_letak)
+            if existing_position and existing_position.id_cctv != cctv_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Titik letak sudah ada"
+                )
+        existing_location = self.location_repository.get_by_id(cctv.id_location)
+        if not existing_location:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Lokasi tidak ditemukan"
+            )
+        
+        # Generate stream key untuk digunakan nanti
+        stream_key = (
+            f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
+            if cctv.id_location is not None and cctv.id_location != db_cctv.id_location
+            else db_cctv.stream_key
+        )
+
+        cctv_data = {
+            "titik_letak": cctv.titik_letak if cctv.titik_letak is not None else db_cctv.titik_letak,
+            "ip_address": cctv.ip_address if cctv.ip_address is not None else db_cctv.ip_address,
+            "id_location": cctv.id_location if cctv.id_location is not None else db_cctv.id_location,
+            "stream_key": stream_key,
+            "is_streaming": db_cctv.is_streaming
+        }
+
+        db_cctv = self.cctv_repository.update(cctv_id,cctv_data)
+        
+        return CctvResponse.from_orm(db_cctv)
+
     def get_stream_urls(self, cctv_id: int) -> Dict:
         """Get stream URLs untuk CCTV"""
         cctv = self.cctv_repository.get_by_id(cctv_id)
         if not cctv:
             raise HTTPException(status_code=404, detail="CCTV tidak ditemukan")
-        
-        # # Generate stream key jika belum ada
-        # if not cctv.stream_key:
-        #     stream_key = f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
-        #     # self.cctv_repository.update_stream_key(cctv_id, stream_key)
-        #     cctv.stream_key = stream_key
-        #     self.db.commit()
+
         
         # Test MediaMTX connection
         mediamtx_online = self.mediamtx_service.test_mediamtx_connection()
@@ -106,57 +150,67 @@ class CctvService:
             "note": "Stream akan aktif ketika diakses pertama kali" if not mediamtx_online else "Stream ready"
         }
     
-    def test_cctv_connection(self, cctv_id: int) -> Dict:
-        """Test koneksi ke CCTV"""
-        cctv = self.cctv_repository.get_by_id(cctv_id)
-        if not cctv:
-            raise HTTPException(status_code=404, detail="CCTV tidak ditemukan")
-        
-         # Generate RTSP URL untuk test
-        rtsp_url = self.mediamtx_service.generate_rtsp_source_url(cctv.ip_address)
-        
-        # Simple reachability test (ping IP)
-        try:
-            import os
-            import platform
-            
-            # Ping the IP address
-            param = "-n" if platform.system().lower() == "windows" else "-c"
-            response = os.system(f"ping {param} 1 {cctv.ip_address} > nul 2>&1")
-            reachable = (response == 0)
-        except:
-            reachable = False
-        
-        return {
-            "cctv_id": cctv.id_cctv,
-            "ip_address": cctv.ip_address,
-            "reachable": reachable,
-            "rtsp_url": rtsp_url,
-            "connection_status": "online" if reachable else "offline"
+    async def get_streams_by_location(self, location_id: int) -> Dict:
+        existing_location = self.location_repository.get_by_id(location_id)
+        if not existing_location:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Lokasi tidak ditemukan"
+            )
+        cameras = self.cctv_repository.get_by_location(location_id).all()
+
+         # Test MediaMTX connection sekali saja
+        mediamtx_online = await self.mediamtx_service.test_mediamtx_connection()
+
+          # Prepare response
+        location_streams = {
+            "location_id": location_id,
+            "location_name": existing_location.nama_lokasi,
+            "total_cameras": len(cameras),
+            "mediamtx_status": "online" if mediamtx_online else "offline",
+            "cameras": []
         }
 
-    # def update_user(self, user_id: int , cctv: UserUpdate):
-    #     db_user = self.cctv_repository.get_by_id(user_id)
-    #     if not db_user:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_404_NOT_FOUND,
-    #             detail="Id cctv tidak ditemukan"
-    #         )
-    #     if cctv.nip:
-    #         exiting_nip  = self.cctv_repository.get_by_nip(cctv.nip)
-    #         if exiting_nip and exiting_nip.id_user != user_id:
-    #             raise HTTPException(
-    #                 status_code=status.HTTP_400_BAD_REQUEST,
-    #                 detail="Nip sudah dipakai akun lain"
-    #             )
-    #     if cctv.username :
-    #         exiting_position = self.cctv_repository.get_by_username(cctv.username)
-    #         if exiting_position and exiting_position.id_user != user_id:
-    #             raise HTTPException(
-    #                 status_code=status.HTTP_400_BAD_REQUEST,
-    #                 detail="Username sudah dipakai akun lain"
-    #             )
-    #     return self.cctv_repository.update(user_id, cctv)
+        if not mediamtx_online:
+            for cam in cameras:
+                location_streams["cameras"].append({
+                    "cctv_id": cam.id_cctv,
+                    "titik_letak": cam.titik_letak,
+                    "ip_address": cam.ip_address,
+                    "stream_key": cam.stream_key,
+                    "is_streaming": False,
+                    "stream_urls": {}
+                })
+                return location_streams
+        
+        tasks = []
+        for camera in cameras:
+                # Bangun RTSP source URL untuk kamera ini
+            rtsp_source_url = self.mediamtx_service.generate_rtsp_source_url(camera.ip_address)
+             # Update status streaming di DB
+            self.cctv_repository.update_streaming_status(camera.id_cctv, True)
+            # Register stream ke MediaMTX
+            tasks.append(
+                self.mediamtx_service.ensure_stream(camera.stream_key, rtsp_source_url)
+            )
+
+        results = await asyncio.gather(*tasks)
+        
+              # isi response
+        for cam, is_active in zip(cameras, results):
+            stream_urls = self.mediamtx_service.generate_stream_urls(cam.stream_key)
+            location_streams["cameras"].append({
+                "cctv_id": cam.id_cctv,
+                "titik_letak": cam.titik_letak,
+                "ip_address": cam.ip_address,
+                "stream_key": cam.stream_key,
+                "is_streaming": is_active,
+                "stream_urls": stream_urls if is_active else {}
+            })
+        return location_streams
+
+    
+
         
     # def hard_delete_user(self, user_id: int):
     #     cctv = self.cctv_repository.hard_delete(user_id)
@@ -176,18 +230,23 @@ class CctvService:
     #         )
     #     return cctv
         
-    # def export_users(self, file_type: str = "csv"):
-    #     data = self.cctv_repository.get_all_for_export()
-    #     df = pd.DataFrame([dict(row._mapping) for row in data])
+    def export_cctv(self, file_type: str = "csv"):
+        data = self.cctv_repository.get_all_for_export()
+        df = pd.DataFrame([dict(row._mapping) for row in data])
 
-    #     if file_type == "csv":
-    #         file_path = "users_export.csv"
-    #         df.to_csv(file_path, index=False)
-    #     else:
-    #         file_path = "users_export.xlsx"
-    #         df.to_excel(file_path, index=False)
+        df.rename(columns={
+            'titik_letak': 'Titik Letak',
+            'ip_address': 'Ip Addres',
+            'cctv_location_name': 'Server Monitoring'
+        }, inplace=True)
+        if file_type == "csv":
+            file_path = "cctv_export.csv"
+            df.to_csv(file_path, index=False, sep=';')
+        else:
+            file_path = "cctv_export.xlsx" # Pilih .xlsx
+            df.to_excel(file_path, index=False)
 
-    #     return file_path
+        return file_path
     
     # def import_users(self, file: UploadFile):
     #     if file.filename.endswith(".csv"):

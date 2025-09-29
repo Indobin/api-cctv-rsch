@@ -4,7 +4,7 @@ from database import get_db
 from schemas.location_schemas import LocationResponse, LocationCreate
 from repositories.location_repository import LocationRepository
 from services.location_service import LocationService
-from core.auth import get_superadmin
+from core.auth import all_roles
 from core.response import success_response
 
 router = APIRouter(prefix="/location", tags=["location"])
@@ -18,7 +18,7 @@ def read_location(
     skip: int = 0,
     limit: int = 50,
     service: LocationService = Depends(get_location_service),
-    current_admin = Depends(get_superadmin)
+    user_role = Depends(all_roles)
 ):
     locations = service.get_all_location(skip, limit)
     return success_response(
@@ -32,7 +32,7 @@ def create_location(
     location: LocationCreate,
     db: Session = Depends(get_db),
     service: LocationService = Depends(get_location_service),
-    current_admin = Depends(get_superadmin)
+    user_role = Depends(all_roles)
 ):
     return service.create_location(location)
 

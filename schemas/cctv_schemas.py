@@ -1,10 +1,21 @@
 from.base import BaseModel, datetime, Optional, Field, field_validator, ConfigDict
-
+from ipaddress import IPv4Address
 
 class CctvBase(BaseModel):
     titik_letak: str = Field(min_length=5, max_length=200)
-    ip_address: str = Field(min_length=5, max_length=255)
-    status: bool
+    ip_address: str = Field(
+        description="Alamat IPv4 yang valid.",
+        min_length=7, # e.g., "0.0.0.0"
+        max_length=15, # e.g., "255.255.255.255"
+    )
+    @field_validator('ip_address')
+    @classmethod
+    def validate_ip_format(cls, v):
+        try:
+            IPv4Address(v)
+            return v
+        except ValueError:
+            raise ValueError('ip_address harus berupa format IPv4 yang valid.')
     id_location: int = Field(gt=0)
 
 class CctvCreate(CctvBase):
@@ -12,9 +23,23 @@ class CctvCreate(CctvBase):
 
 class CctvUpdate(BaseModel):
     titik_letak: Optional[str] = Field(None,min_length=5, max_length=200)
-    ip_address: Optional[str] = Field(None,min_length=5, max_length=200)
-    status: Optional[bool] = Field(None)
+    ip_address: Optional[str] = Field(
+        None,
+        description="Alamat IPv4 yang valid.",
+        min_length=7, 
+        max_length=15, 
+    )
     id_location: Optional[int] = Field(None, gt=0 )
+    @field_validator("ip_address")
+    @classmethod
+    def validate_ip_format(cls, v):
+        if v is None:
+            return v
+        try:
+            IPv4Address(v)
+            return v
+        except ValueError:
+            raise ValueError("ip_address harus berupa format IPv4 yang valid.")
 
 class CctvDelete(BaseModel):
     # message: str
@@ -42,8 +67,8 @@ class StreamUrlsResponse(BaseModel):
 
 # Buat schema untuk success response wrapper
 class SuccessResponse(BaseModel):
-    status: str = "success"
+    # status: str = "success"
     message: str
-    data: Optional[StreamUrlsResponse] = None  # Bisa juga menggunakan Union jika multiple types
+    data: Optional[StreamUrlsResponse] = None  
 
     model_config = ConfigDict(from_attributes=True)

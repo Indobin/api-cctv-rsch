@@ -1,14 +1,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from database import get_db
-from schemas.cctv_schemas import CctvCreate, StreamUrlsResponse, SuccessResponse
+from schemas.cctv_schemas import CctvCreate, CctvUpdate, StreamUrlsResponse, SuccessResponse
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from services.cctv_service import CctvService
-from core.auth import get_superadmin
+from core.auth import all_roles
 from core.response import success_response
-import requests
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/cctv", tags=["cctv"])
 
@@ -23,11 +22,11 @@ def read_cctv(
     skip: int = 0,
     limit: int = 50,
     service: CctvService = Depends(get_cctv_service),
-    current_admin = Depends(get_superadmin)
+    user_role = Depends(all_roles)
 ):
     cctvs = service.get_all_cctv(skip, limit)
     return success_response(
-            message="Cctv retrieved successfully",
+            message="Daftar cctv berhasil ditampilkan",
             data=cctvs
         )
 
@@ -37,31 +36,56 @@ def create_cctv(
     cctv: CctvCreate,
     db: Session = Depends(get_db),
     service: CctvService = Depends(get_cctv_service),
-    current_admin = Depends(get_superadmin)
+    user_role = Depends(all_roles)
 ):
     new_cctv = service.create_cctv(cctv)
     return success_response(
-            message="Cctv retrieved successfully",
+            message="Cctv berhasil ditambahkan",
             data=new_cctv
         )
+
+@router.put("/{cctv_id}")
+def update_cctv(
+    cctv_id: int,
+    cctv: CctvUpdate,
+    service: CctvService = Depends(get_cctv_service),
+    user_role = Depends(all_roles)
+):
+    updated = service.update_cctv(cctv_id, cctv)
+    return success_response(
+        message="Cctv berhasil diperbarui",
+        data=updated
+    )
 
 @router.get("/{cctv_id}/stream")
 def get_cctv_stream(
     cctv_id: int,
     service: CctvService = Depends(get_cctv_service),
-    current_admin = Depends(get_superadmin)
+    user_role = Depends(all_roles)
 ):
     stream_urls = service.get_stream_urls(cctv_id)
     return success_response(
-        message="Stream URLs retrieved successfully",
+        message="Stream URLs berhasil ditampilkan",
         data=stream_urls
+    )
+
+@router.get("/location/{location_id}/streams")
+async def get_streams_by_location(
+    location_id: int,
+    service: CctvService = Depends(get_cctv_service),
+    user_role = Depends(all_roles)
+):
+    location_streams = await service.get_streams_by_location(location_id)
+    return success_response(
+        message=f"Streams untuk lokasi {location_id} berhasil ditampilkan",
+        data=location_streams
     )
 
 @router.delete("/{cctv_id}")
 def delete_cctv(
     cctv_id: int,
     service: CctvService = Depends(get_cctv_service),
-    current_admin = Depends(get_superadmin)
+    user_role = Depends(all_roles)
 ):
     result = service.delete_cctv(cctv_id)
     return success_response(
@@ -69,16 +93,11 @@ def delete_cctv(
         data=None
     )
 
-@router.get("/{cctv_id}/test")
-def test_cctv_connection(
-    cctv_id: int,
-    db: Session = Depends(get_db),
-    current_admin = Depends(get_superadmin),
-    service: CctvService = Depends(get_cctv_service)
+@router.get("/export")
+def export_cctv(
+    file_type: str = "xlsx",
+    service: CctvService = Depends(get_cctv_service),
+    user_role = Depends(all_roles)
 ):
-    test_result = service.test_cctv_connection(cctv_id)
-    
-    return success_response(
-        message="Connection test completed",
-        data=test_result
-    )
+    file_path = service.export_cctv(file_type)
+    return FileResponse(file_path, filename=f"cctv.{file_type}")

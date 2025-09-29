@@ -11,14 +11,14 @@ class UserService:
         return [UserResponse.from_orm(u) for u in users]
     
     def create_user(self, user: UserCreate):
-        exiting_nip = self.user_repository.get_by_nip(user.nip)
-        exiting_username = self.user_repository.get_by_username(user.username)
-        if exiting_nip:
+        existing_nip = self.user_repository.get_by_nip(user.nip)
+        existing_username = self.user_repository.get_by_username(user.username)
+        if existing_nip:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Nip sudah ada"
             )
-        if exiting_username:
+        if existing_username:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username sudah ada"
@@ -33,15 +33,15 @@ class UserService:
                 detail="Id user tidak ditemukan"
             )
         if user.nip:
-            exiting_nip  = self.user_repository.get_by_nip(user.nip)
-            if exiting_nip and exiting_nip.id_user != user_id:
+            existing_nip  = self.user_repository.get_by_nip(user.nip)
+            if existing_nip and existing_nip.id_user != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Nip sudah dipakai akun lain"
                 )
         if user.username :
-            exiting_username = self.user_repository.get_by_username(user.username)
-            if exiting_username and exiting_username.id_user != user_id:
+            existing_username = self.user_repository.get_by_username(user.username)
+            if existing_username and existing_username.id_user != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Username sudah dipakai akun lain"
