@@ -24,13 +24,41 @@ class MediaMTXService:
             logger.warning(f"MediaMTX connection test failed: {e}")
             return False
     
+    async def get_all_streams_status(self) -> Dict[str, Dict]:
+        """Get status semua streams sekaligus dari /paths/list"""
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(f"{self.api_base_url}/paths/list")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    status_map = {}
+                    
+                    for stream in data.get('items', []):
+                        stream_key = stream['name']
+                        status_map[stream_key] = {
+                            "exists": True,
+                            "has_source": stream.get('source') is not None,
+                            "source_ready": stream.get('ready', False),
+                            "is_active": stream.get('ready', False)
+                        }
+                    
+                    return status_map
+                
+                return {}
+                
+        except Exception as e:
+            logger.warning(f"Error getting all streams status: {e}")
+            return {}
+
+
     async def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
         """Register stream ke MediaMTX"""
         try:
             path_config = {
                 "source": rtsp_source_url,
                 "sourceProtocol": "tcp",  # Important untuk Dahua
-                "sourceOnDemand": True,   # Save resources
+                "sourceOnDemand": False,   # Save resources
                 # "readTimeout": "15s"
             }
             async with httpx.AsyncClient(timeout=5) as client:
