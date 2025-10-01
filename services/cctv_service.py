@@ -1,15 +1,13 @@
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
-from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse, StreamUrlsResponse
-from fastapi import HTTPException, status, UploadFile
+from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse
+from fastapi import HTTPException, status
 from services.mediamtx_service import MediaMTXService
-from io import BytesIO
 import pandas as pd
 import asyncio
 import logging
 from typing import Dict
 import uuid
-from pydantic import ValidationError
 logger = logging.getLogger(__name__)
 
 class CctvService:  
@@ -151,19 +149,16 @@ class CctvService:
             "note": "Stream akan aktif ketika diakses pertama kali" if not mediamtx_online else "Stream ready"
         }
     
+    
     async def get_streams_by_location(self, location_id: int) -> Dict:
         existing_location = self.location_repository.get_by_id(location_id)
         if not existing_location:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Lokasi tidak ditemukan"
-            )
+            raise HTTPException(status_code=400, detail="Lokasi tidak ditemukan")
+        
         cameras = self.cctv_repository.get_by_location(location_id).all()
 
-         # Test MediaMTX connection sekali saja
         mediamtx_online = await self.mediamtx_service.test_mediamtx_connection()
 
-          # Prepare response
         location_streams = {
             "location_id": location_id,
             "location_name": existing_location.nama_lokasi,
@@ -182,32 +177,41 @@ class CctvService:
                     "is_streaming": False,
                     "stream_urls": {}
                 })
-                return location_streams
-        
-        tasks = []
+            return location_streams
+       
+        register_tasks = []
         for camera in cameras:
-                # Bangun RTSP source URL untuk kamera ini
             rtsp_source_url = self.mediamtx_service.generate_rtsp_source_url(camera.ip_address)
-             # Update status streaming di DB
-            self.cctv_repository.update_streaming_status(camera.id_cctv, True)
-            # Register stream ke MediaMTX
-            tasks.append(
+            register_tasks.append(
                 self.mediamtx_service.ensure_stream(camera.stream_key, rtsp_source_url)
             )
-
-        results = await asyncio.gather(*tasks)
         
-              # isi response
-        for cam, is_active in zip(cameras, results):
-            stream_urls = self.mediamtx_service.generate_stream_urls(cam.stream_key)
+        await asyncio.gather(*register_tasks)
+        
+        await asyncio.sleep(2)
+        
+        all_status = await self.mediamtx_service.get_all_streams_status()
+   
+        for cam in cameras:
+            status = all_status.get(cam.stream_key, {
+                "exists": False, 
+                "has_source": False, 
+                "source_ready": False, 
+                "is_active": False
+            })
+            
+            stream_urls = self.mediamtx_service.generate_stream_urls(cam.stream_key) if status["is_active"] else {}
+            
             location_streams["cameras"].append({
                 "cctv_id": cam.id_cctv,
                 "titik_letak": cam.titik_letak,
                 "ip_address": cam.ip_address,
                 "stream_key": cam.stream_key,
-                "is_streaming": is_active,
-                "stream_urls": stream_urls if is_active else {}
+                "is_streaming": status["is_active"],
+                "stream_urls": stream_urls,
+                "stream_status": status
             })
+        
         return location_streams
 
     
@@ -244,7 +248,7 @@ class CctvService:
             file_path = "cctv_export.csv"
             df.to_csv(file_path, index=False, sep=';')
         else:
-            file_path = "cctv_export.xlsx" # Pilih .xlsx
+            file_path = "cctv_export.xlsx" 
             df.to_excel(file_path, index=False)
 
         return file_path
@@ -276,9 +280,8 @@ class CctvService:
                 lokasi = self.location_repository.create(location=type("LocationCreate", (), {"nama_lokasi": row["server_monitoring"]}))
             existing = self.cctv_repository.get_by_ip(row["ip_address"])
             if existing:
-                continue  # kalau mau update, bisa ubah logic di sini
+                continue  
 
-            # 3. Buat data cctv
             stream_key = f"loc_{lokasi.id_location}_cam_{uuid.uuid4().hex[:8]}"
             cctv_data = {
                 "titik_letak": row["titik_letak"],
@@ -287,7 +290,6 @@ class CctvService:
                 "id_location": lokasi.id_location,
             }
 
-            # 4. Simpan pakai repository
             cctv = self.cctv_repository.create(cctv_data)
             imported_cctvs.append(cctv)
 
