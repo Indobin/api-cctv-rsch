@@ -73,7 +73,8 @@ class UserService:
         df.rename(columns={
             "nama": "Nama",
             "username": "Username",
-            "nip": "Nip"
+            "nip": "Nip",
+            "password": "Password"
         }, inplace=True)
         if file_type == "csv":
             file_path = "users_export.csv"

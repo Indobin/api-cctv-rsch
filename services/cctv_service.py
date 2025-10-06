@@ -201,7 +201,7 @@ class CctvService:
             })
             
             stream_urls = self.mediamtx_service.generate_stream_urls(cam.stream_key) if status["is_active"] else {}
-            
+            updated_streaming = self.cctv_repository.update_streaming_status(cam.id_cctv, status["is_active"])
             location_streams["cameras"].append({
                 "cctv_id": cam.id_cctv,
                 "titik_letak": cam.titik_letak,
