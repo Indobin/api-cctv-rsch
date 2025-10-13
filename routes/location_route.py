@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
-from schemas.location_schemas import LocationResponse, LocationCreate
+from schemas.location_schemas import LocationResponse, LocationCreate, LocationUpdate, LocationDelete
 from repositories.location_repository import LocationRepository
 from services.location_service import LocationService
 from core.auth import all_roles
@@ -27,12 +27,31 @@ def read_location(
         )
 
 
-@router.post("/", response_model=LocationResponse)
+@router.post("/", response_model=dict)
 def create_location(
     location: LocationCreate,
     db: Session = Depends(get_db),
     service: LocationService = Depends(get_location_service),
     user_role = Depends(all_roles)
 ):
-    return service.create_location(location)
+    created = service.create_location(location)
+    return success_response("Lokasi berhasil ditambahkan", LocationResponse.from_orm(created))
 
+@router.put("/{location_id}", response_model=dict)
+def update_location(
+    location_id: int,
+    location: LocationUpdate,
+    service: LocationService = Depends(get_location_service),
+    user_role = Depends(all_roles)
+):
+    updated = service.update_location(location_id, location)
+    return success_response("Lokasi berhasil diperbarui", LocationResponse.from_orm(updated))
+
+@router.delete("/", response_model=dict)
+def hard_delete_location(
+    location_id: int,
+    service: LocationService = Depends(get_location_service),
+    user_role = Depends(all_roles)
+):
+    deleted = service.hard_delete_location(location_id)
+    return success_response("Lokasi berhasil dihapus", LocationDelete.from_orm(deleted))

@@ -1,4 +1,4 @@
-from.base import Session, Location, LocationCreate
+from.base import Session, Location, LocationCreate, LocationUpdate
 
 class LocationRepository:
     def __init__(self, db: Session):
@@ -20,4 +20,22 @@ class LocationRepository:
         self.db.add(db_location)
         self.db.commit()
         self.db.refresh(db_location)
+        return db_location
+    
+    def update(self, location_id, location: LocationUpdate):
+        db_location = self.get_by_id(location_id)
+        if not db_location:
+            return None
+        if location.nama_lokasi:
+            db_location.nama_lokasi = location.nama_lokasi
+        self.db.commit()
+        self.db.refresh(db_location)
+        return db_location
+    
+    def hard_delete(self, location_id:int):
+        db_location = self.get_by_id(location_id)
+        if not db_location:
+            return None
+        self.db.delete(db_location)
+        self.db.commit()
         return db_location
