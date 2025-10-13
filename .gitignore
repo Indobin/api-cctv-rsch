@@ -2,6 +2,7 @@
 .env
 .env.local
 .env*.local
-
+venv/
+_pycache_/
 # Juga abaikan file env contoh (opsional)
 !.env.example  # Pengecualian: file contoh tetap di-track

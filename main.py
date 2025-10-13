@@ -17,16 +17,16 @@ origins = [
     "http://localhost:3000",  # Alamat frontend React saat development
     "http://localhost:5173",  # Alamat frontend Vite/React saat development
     "http://localhost:8080",  # Alamat frontend Vue.js saat development
-    "https://domain-frontend-anda.com", # Alamat frontend Anda saat sudah di-deploy (produksi)
+    "https://domain-frontend-anda.com",  # Alamat frontend Anda saat sudah di-deploy (produksi)
 ]
 
 # Tambahkan CORSMiddleware ke aplikasi
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # Mengizinkan origin yang ada di daftar 'origins'
-    allow_credentials=True, # Mengizinkan cookies dikirimkan
-    allow_methods=["*"],    # Mengizinkan semua metode HTTP (GET, POST, PUT, dll.)
-    allow_headers=["*"],    # Mengizinkan semua header HTTP
+    allow_credentials=True,  # Mengizinkan cookies dikirimkan
+    allow_methods=["*"],  # Mengizinkan semua metode HTTP (GET, POST, PUT, dll.)
+    allow_headers=["*"],  # Mengizinkan semua header HTTP
 )
 
 app.include_router(user_route.router)
@@ -34,6 +34,7 @@ app.include_router(auth_router.router)
 app.include_router(role_router.router)
 app.include_router(location_route.router)
 app.include_router(cctv_router.router)
+
 
 @app.get("/")
 def read_root():
