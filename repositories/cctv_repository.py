@@ -71,24 +71,15 @@ class CctvRepository:
             self.db.refresh(cctv)
         return cctv
     
-    # def hard_delete(self, user_id: int):
-    #     db_cctv = self.get_by_id(user_id)
-    #     if not db_cctv:
-    #         return None
-        
-    #     self.db.delete(db_cctv)
-    #     self.db.commit()
-    #     return db_cctv
-    
-    # def soft_delete(self, user_id:int):
-    #     db_cctv = self.get_by_id(user_id)
-    #     if not db_cctv:
-    #         return None
-    #     utc_now = datetime.now(ZoneInfo("UTC"))
-    #     db_cctv.deleted_at = utc_now
-    #     self.db.commit()
-    #     self.db.refresh(db_cctv)
-    #     return db_cctv
+    def soft_delete(self, cctv_id:int):
+        db_cctv = self.get_by_id(cctv_id)
+        if not db_cctv:
+            return None
+        utc_now = datetime.now(ZoneInfo("UTC"))
+        db_cctv.deleted_at = utc_now
+        self.db.commit()
+        self.db.refresh(db_cctv)
+        return db_cctv
     
     
     def get_all_for_export(self):

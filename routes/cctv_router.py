@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 from database import get_db
-from schemas.cctv_schemas import CctvCreate, CctvUpdate, StreamUrlsResponse, SuccessResponse
+from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvDelete, SuccessResponse
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from services.cctv_service import CctvService
@@ -57,41 +57,14 @@ def update_cctv(
         data=updated
     )
 
-@router.get("/{cctv_id}/stream")
-def get_cctv_stream(
-    cctv_id: int,
-    service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
-):
-    stream_urls = service.get_stream_urls(cctv_id)
-    return success_response(
-        message="Stream URLs berhasil ditampilkan",
-        data=stream_urls
-    )
-
-@router.get("/location/{location_id}/streams")
-async def get_streams_by_location(
-    location_id: int,
-    service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
-):
-    location_streams = await service.get_streams_by_location(location_id)
-    return success_response(
-        message=f"Streams untuk lokasi {location_id} berhasil ditampilkan",
-        data=location_streams
-    )
-
 @router.delete("/{cctv_id}")
-def delete_cctv(
+def soft_delete_cctv(
     cctv_id: int,
     service: CctvService = Depends(get_cctv_service),
     user_role = Depends(all_roles)
 ):
-    result = service.delete_cctv(cctv_id)
-    return success_response(
-        message=result["message"],
-        data=None
-    )
+    deleted = service.soft_delete_cctv(cctv_id)
+    return success_response("Lokasi berhasil dihapus", CctvDelete.from_orm(deleted))
 
 @router.get("/export")
 def export_cctv(

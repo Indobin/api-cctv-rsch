@@ -114,126 +114,14 @@ class CctvService:
         
         return CctvResponse.from_orm(db_cctv)
 
-    def get_stream_urls(self, cctv_id: int) -> Dict:
-        """Get stream URLs untuk CCTV"""
-        cctv = self.cctv_repository.get_by_id(cctv_id)
+    def soft_delete_cctv(self, cctv_id: int):
+        cctv = self.cctv_repository.soft_delete(cctv_id)
         if not cctv:
-            raise HTTPException(status_code=404, detail="CCTV tidak ditemukan")
-
-        
-        # Test MediaMTX connection
-        mediamtx_online = self.mediamtx_service.test_mediamtx_connection()
-        
-        if mediamtx_online:
-            rtsp_source_url = self.mediamtx_service.generate_rtsp_source_url(cctv.ip_address)
-            stream_registered = self.mediamtx_service.add_stream_to_mediamtx(
-                cctv.stream_key,
-                rtsp_source_url
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User dengan id {cctv_id} tidak ditemukan"
             )
-            streaming_active = stream_registered
-        else:
-            streaming_active = False
-
-        # Update status
-        self.cctv_repository.update_streaming_status(cctv_id, streaming_active)
-
-        # Generate URLs
-        stream_urls = self.mediamtx_service.generate_stream_urls(cctv.stream_key)
-        
-        return {
-            "cctv_id": cctv.id_cctv,
-            "stream_key": cctv.stream_key,
-            "stream_urls": stream_urls,
-            "is_streaming": mediamtx_online,
-            "mediamtx_status": "online" if mediamtx_online else "offline",
-            "note": "Stream akan aktif ketika diakses pertama kali" if not mediamtx_online else "Stream ready"
-        }
-    
-    
-    async def get_streams_by_location(self, location_id: int) -> Dict:
-        existing_location = self.location_repository.get_by_id(location_id)
-        if not existing_location:
-            raise HTTPException(status_code=400, detail="Lokasi tidak ditemukan")
-        
-        cameras = self.cctv_repository.get_by_location(location_id).all()
-
-        mediamtx_online = await self.mediamtx_service.test_mediamtx_connection()
-
-        location_streams = {
-            "location_id": location_id,
-            "location_name": existing_location.nama_lokasi,
-            "total_cameras": len(cameras),
-            "mediamtx_status": "online" if mediamtx_online else "offline",
-            "cameras": []
-        }
-
-        if not mediamtx_online:
-            for cam in cameras:
-                location_streams["cameras"].append({
-                    "cctv_id": cam.id_cctv,
-                    "titik_letak": cam.titik_letak,
-                    "ip_address": cam.ip_address,
-                    "stream_key": cam.stream_key,
-                    "is_streaming": False,
-                    "stream_urls": {}
-                })
-            return location_streams
-       
-        register_tasks = []
-        for camera in cameras:
-            rtsp_source_url = self.mediamtx_service.generate_rtsp_source_url(camera.ip_address)
-            register_tasks.append(
-                self.mediamtx_service.ensure_stream(camera.stream_key, rtsp_source_url)
-            )
-        
-        await asyncio.gather(*register_tasks)
-        
-        await asyncio.sleep(2)
-        
-        all_status = await self.mediamtx_service.get_all_streams_status()
-   
-        for cam in cameras:
-            status = all_status.get(cam.stream_key, {
-                "exists": False, 
-                "has_source": False, 
-                "source_ready": False, 
-                "is_active": False
-            })
-            
-            stream_urls = self.mediamtx_service.generate_stream_urls(cam.stream_key) if status["is_active"] else {}
-            updated_streaming = self.cctv_repository.update_streaming_status(cam.id_cctv, status["is_active"])
-            location_streams["cameras"].append({
-                "cctv_id": cam.id_cctv,
-                "titik_letak": cam.titik_letak,
-                "ip_address": cam.ip_address,
-                "stream_key": cam.stream_key,
-                "is_streaming": status["is_active"],
-                "stream_urls": stream_urls,
-                "stream_status": status
-            })
-        
-        return location_streams
-
-    
-
-        
-    # def hard_delete_user(self, user_id: int):
-    #     cctv = self.cctv_repository.hard_delete(user_id)
-    #     if not cctv:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_404_NOT_FOUND,
-    #             detail=f"User dengan id {user_id} tidak ditemukan"
-    #         )
-    #     return cctv
-
-    # def soft_delete_user(self, user_id: int):
-    #     cctv = self.cctv_repository.soft_delete(user_id)
-    #     if not cctv:
-    #         raise HTTPException(
-    #             status_code=status.HTTP_404_NOT_FOUND,
-    #             detail=f"User dengan id {user_id} tidak ditemukan"
-    #         )
-    #     return cctv
+        return cctv
         
     def export_cctv(self, file_type: str = "csv"):
         data = self.cctv_repository.get_all_for_export()
