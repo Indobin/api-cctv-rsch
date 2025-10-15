@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routes import user_route, auth_router, role_router, location_route, cctv_router
+from routes import user_route, auth_router, role_router, location_route, cctv_router, mediamtx_router
 from models.user_model import User
 from models.role_model import Role
 from models.notification_model import Notification
@@ -34,6 +34,7 @@ app.include_router(auth_router.router)
 app.include_router(role_router.router)
 app.include_router(location_route.router)
 app.include_router(cctv_router.router)
+app.include_router(mediamtx_router.router)
 
 
 @app.get("/")

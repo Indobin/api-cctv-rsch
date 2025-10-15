@@ -44,7 +44,8 @@ class CctvUpdate(BaseModel):
 class CctvDelete(BaseModel):
     # message: str
     deleted_at: Optional[datetime] = None
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes =True
     
 class CctvResponse(CctvBase):
     id_cctv: int
