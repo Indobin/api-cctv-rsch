@@ -18,7 +18,8 @@ class AuthService:
             "id_role": user.id_role,
             "nama": user.nama
         })
+        update_last_login = self.user_repository.last_login(user.id_user)
         return {
             "access_token": token,
-            "token_type": "bearer"
+            "token_type": "bearer",
         }
