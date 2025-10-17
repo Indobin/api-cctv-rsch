@@ -107,6 +107,13 @@ class UserRepository:
             .all()
     )
 
+    def last_login(self, user_id:int):
+        db_user = self.get_by_id(user_id)
+        utc_now = datetime.now(ZoneInfo("UTC"))
+        db_user.updated_at = utc_now
+        self.db.commit()
+        self.db.refresh(db_user)
+        return db_user
    
 
         
