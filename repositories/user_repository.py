@@ -1,4 +1,4 @@
-from.base import Session, User, CryptContext, UserCreate, UserUpdate, Role
+from.base import Session, User, CryptContext, Role
 from sqlalchemy import func
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -42,7 +42,7 @@ class UserRepository:
     def get_by_id(self, user_id: int):
         return self.db.query(User).filter(User.id_user == user_id).first()
     
-    def create(self, user: UserCreate):
+    def create(self, user: User):
         hashed_password = pwd_context.hash(user.password)
         db_user = User(
             nama = user.nama,
@@ -56,7 +56,7 @@ class UserRepository:
         self.db.refresh(db_user)
         return db_user
     
-    def update(self, user_id: int, user: UserUpdate):
+    def update(self, user_id: int, user: User):
         db_user = self.get_by_id(user_id)
         if not db_user:
             return None
@@ -110,7 +110,7 @@ class UserRepository:
     def last_login(self, user_id:int):
         db_user = self.get_by_id(user_id)
         utc_now = datetime.now(ZoneInfo("UTC"))
-        db_user.updated_at = utc_now
+        db_user.last_login = utc_now
         self.db.commit()
         self.db.refresh(db_user)
         return db_user

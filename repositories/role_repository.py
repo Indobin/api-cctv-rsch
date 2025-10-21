@@ -1,4 +1,4 @@
-from.base import Session, Role, RoleCreate
+from.base import Session, Role
 
 class RoleRepository:
     def __init__(self, db: Session):
@@ -13,7 +13,7 @@ class RoleRepository:
     def get_by_name(self, nama_role=str):
         return self.db.query(Role).filter(Role.nama_role == nama_role).first()
     
-    def create(self, role: RoleCreate):
+    def create(self, role: Role):
         db_role = Role(
             nama_role = role.nama_role
         )

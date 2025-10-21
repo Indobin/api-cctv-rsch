@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routes import user_route, auth_router, role_router, location_route, cctv_router, mediamtx_router
+from routes import auth_route, cctv_route, mediamtx_route, notification_route, role_route, user_route, location_route
 from models.user_model import User
 from models.role_model import Role
 from models.notification_model import Notification
@@ -30,12 +30,12 @@ app.add_middleware(
 )
 
 app.include_router(user_route.router)
-app.include_router(auth_router.router)
-app.include_router(role_router.router)
+app.include_router(auth_route.router)
+app.include_router(role_route.router)
 app.include_router(location_route.router)
-app.include_router(cctv_router.router)
-app.include_router(mediamtx_router.router)
-
+app.include_router(cctv_route.router)
+app.include_router(mediamtx_route.router)
+app.include_router(notification_route.router)
 
 @app.get("/")
 def read_root():

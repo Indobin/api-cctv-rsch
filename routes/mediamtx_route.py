@@ -11,9 +11,9 @@ router = APIRouter(prefix="/streams", tags=["streams"])
 
 
 def get_stream_service(db: Session = Depends(get_db)):
-    cctv_repository = CctvRepository(db)
-    location_repository = LocationRepository(db)
-    return StreamService(cctv_repository, location_repository)
+    cctv_repos = CctvRepository(db)
+    location_repo = LocationRepository(db)
+    return StreamService(cctv_repos, location_repo)
 
 
 @router.get("/cctv/{cctv_id}")

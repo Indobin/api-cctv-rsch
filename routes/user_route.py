@@ -10,8 +10,8 @@ from core.auth import superadmin_role
 router = APIRouter(prefix="/users", tags=["users"])
 
 def get_user_service(db: Session = Depends(get_db)):
-    user_repository = UserRepository(db)
-    return UserService(user_repository)
+    user_repo = UserRepository(db)
+    return UserService(user_repo)
 
 def success_response(message: str, data=None):
     return{

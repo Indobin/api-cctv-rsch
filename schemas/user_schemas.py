@@ -24,7 +24,7 @@ class UserResponse(UserBase):
     id_role: int
     user_role_name: Optional[str] = None
     created_at: Optional[datetime]= None
-    updated_at: Optional[datetime]= None
+    last_login: Optional[datetime]= None
     deleted_at: Optional[datetime]= None
     class Config:
         from_attributes = True

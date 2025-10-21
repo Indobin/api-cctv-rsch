@@ -43,9 +43,9 @@ class CctvService:
                 detail="Lokasi tidak ditemukan"
             )
         
-        # Generate stream key untuk digunakan nanti
+        # Generate stream key 
         stream_key = f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
-        # Buat data CCTV tanpa setup stream dulu
+       
         cctv_data = {
             "titik_letak": cctv.titik_letak,
             "ip_address": cctv.ip_address,
@@ -55,10 +55,8 @@ class CctvService:
         }
 
         try:
-            # Buat record CCTV saja
             db_cctv = self.cctv_repository.create(cctv_data)
             
-            # Return response tanpa URL stream (karena belum disetup)
             return CctvResponse.from_orm(db_cctv)
             
         except Exception as e:
@@ -95,7 +93,7 @@ class CctvService:
                 detail="Lokasi tidak ditemukan"
             )
         
-        # Generate stream key untuk digunakan nanti
+        # Generate stream key 
         stream_key = (
             f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
             if cctv.id_location is not None and cctv.id_location != db_cctv.id_location

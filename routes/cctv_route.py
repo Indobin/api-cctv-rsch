@@ -13,9 +13,9 @@ router = APIRouter(prefix="/cctv", tags=["cctv"])
 
 
 def get_cctv_service(db: Session = Depends(get_db)):
-    cctv_repository = CctvRepository(db)
-    location_repository = LocationRepository(db)
-    return CctvService(cctv_repository, location_repository)
+    cctv_repo = CctvRepository(db)
+    location_repo = LocationRepository(db)
+    return CctvService(cctv_repo, location_repo)
 
 @router.get("/")
 def read_cctv(

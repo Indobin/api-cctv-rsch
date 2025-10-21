@@ -1,4 +1,4 @@
-from.base import Session, CctvCamera, Location, CctvCreate
+from.base import Session, CctvCamera, Location
 from sqlalchemy import func
 from datetime import datetime
 from zoneinfo import ZoneInfo

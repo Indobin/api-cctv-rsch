@@ -9,8 +9,8 @@ from core.auth import superadmin_role
 router = APIRouter(prefix="/role", tags=["role"])
 
 def get_role_service(db: Session = Depends(get_db)):
-    role_repository = RoleRepository(db)
-    return RoleService(role_repository)
+    role_repo = RoleRepository(db)
+    return RoleService(role_repo)
 
 @router.get("/", response_model=list[Role])
 def read_role(
