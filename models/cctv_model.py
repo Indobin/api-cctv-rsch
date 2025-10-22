@@ -7,7 +7,7 @@ class CctvCamera(Base):
     titik_letak = Column(String)
     ip_address = Column(String)
     stream_key = Column(String, unique=True)
-    is_streaming = Column(Boolean, default=False)
+    is_streaming = Column(Boolean, default=False)   
     id_location = Column(Integer, ForeignKey("location.id_location", ondelete="CASCADE"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

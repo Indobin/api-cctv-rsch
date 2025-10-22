@@ -4,7 +4,6 @@ class Notification(Base):
     __tablename__ = "notification"
 
     id_notification = Column(Integer, primary_key=True)
-    is_read = Column(Boolean)
     id_history = Column(Integer, ForeignKey("history.id_history"))
     id_user = Column(Integer, ForeignKey("users.id_user"))
 

@@ -1,6 +1,4 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from database import get_db
+from.base import APIRouter, Depends, Session, get_db
 from services.auth_service import AuthService
 
 router = APIRouter(prefix='/auth', tags=["auth"])

@@ -17,9 +17,8 @@ class CctvService:
         self.location_repository= location_repository
         self.mediamtx_service = MediaMTXService()
 
-    def get_all_cctv(self, skip: int = 0, limit: int = 50 ):
-        users = self.cctv_repository.get_all(skip, limit)
-        return [CctvResponse.from_orm(u) for u in users]
+    def get_all_cctv(self, skip: int = 0, limit: int = 500 ):
+        return self.cctv_repository.get_all(skip, limit)
        
     def create_cctv(self, cctv: CctvCreate):
         existing_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
@@ -43,9 +42,9 @@ class CctvService:
                 detail="Lokasi tidak ditemukan"
             )
         
-        # Generate stream key untuk digunakan nanti
+        # Generate stream key 
         stream_key = f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
-        # Buat data CCTV tanpa setup stream dulu
+       
         cctv_data = {
             "titik_letak": cctv.titik_letak,
             "ip_address": cctv.ip_address,
@@ -55,11 +54,11 @@ class CctvService:
         }
 
         try:
-            # Buat record CCTV saja
             db_cctv = self.cctv_repository.create(cctv_data)
+            db_location = self.location_repository.get_by_id(db_cctv.id_location)
+            db_cctv.cctv_location_name = db_location.nama_lokasi
+            return db_cctv
             
-            # Return response tanpa URL stream (karena belum disetup)
-            return CctvResponse.from_orm(db_cctv)
             
         except Exception as e:
             raise HTTPException(
@@ -95,7 +94,7 @@ class CctvService:
                 detail="Lokasi tidak ditemukan"
             )
         
-        # Generate stream key untuk digunakan nanti
+        # Generate stream key 
         stream_key = (
             f"loc_{cctv.id_location}_cam_{uuid.uuid4().hex[:8]}"
             if cctv.id_location is not None and cctv.id_location != db_cctv.id_location
@@ -111,8 +110,9 @@ class CctvService:
         }
 
         db_cctv = self.cctv_repository.update(cctv_id,cctv_data)
-        
-        return CctvResponse.from_orm(db_cctv)
+        db_location = self.location_repository.get_by_id(db_cctv.id_location)
+        db_cctv.cctv_location_name = db_location.nama_lokasi
+        return db_cctv
 
     def soft_delete_cctv(self, cctv_id: int):
         cctv = self.cctv_repository.soft_delete(cctv_id)

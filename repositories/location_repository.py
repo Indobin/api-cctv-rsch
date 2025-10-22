@@ -1,4 +1,4 @@
-from.base import Session, Location, LocationCreate, LocationUpdate
+from.base import Session, Location
 
 class LocationRepository:
     def __init__(self, db: Session):
@@ -13,7 +13,7 @@ class LocationRepository:
     def get_by_name(self, nama_lokasi=str):
         return self.db.query(Location).filter(Location.nama_lokasi == nama_lokasi).first()
     
-    def create(self, location: LocationCreate):
+    def create(self, location: Location):
         db_location = Location(
             nama_lokasi = location.nama_lokasi
         )
@@ -22,7 +22,7 @@ class LocationRepository:
         self.db.refresh(db_location)
         return db_location
     
-    def update(self, location_id, location: LocationUpdate):
+    def update(self, location_id, location: Location):
         db_location = self.get_by_id(location_id)
         if not db_location:
             return None

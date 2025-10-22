@@ -1,19 +1,16 @@
 import asyncio
 import httpx
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 from datetime import datetime
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
-import json
 import logging
 from dataclasses import dataclass, asdict
 from enum import Enum
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 logger = logging.getLogger(__name__)
-# logger = logging.getLogger("MediaMTXService")
-# logger.setLevel(logging.INFO)
 
 class StreamStatus(str, Enum):
     ACTIVE = "active"
@@ -31,49 +28,49 @@ class StreamInfo:
     last_updated: datetime
     error_message: Optional[str] = None
 
-class StreamEventManager:
-    """Manager untuk SSE events tanpa Redis"""
+# class StreamEventManager:
+#     """Manager untuk SSE events tanpa Redis"""
     
-    def __init__(self):
-        self._subscribers: Dict[str, Set[asyncio.Queue]] = {}
-        self._lock = asyncio.Lock()
+#     def __init__(self):
+#         self._subscribers: Dict[str, Set[asyncio.Queue]] = {}
+#         self._lock = asyncio.Lock()
     
-    async def subscribe(self, location_id: str) -> asyncio.Queue:
-        """Subscribe ke stream events untuk lokasi tertentu"""
-        async with self._lock:
-            if location_id not in self._subscribers:
-                self._subscribers[location_id] = set()
+#     async def subscribe(self, location_id: str) -> asyncio.Queue:
+#         """Subscribe ke stream events untuk lokasi tertentu"""
+#         async with self._lock:
+#             if location_id not in self._subscribers:
+#                 self._subscribers[location_id] = set()
             
-            queue = asyncio.Queue(maxsize=50)
-            self._subscribers[location_id].add(queue)
-            logger.info(f"New subscriber for location {location_id}")
-            return queue
+#             queue = asyncio.Queue(maxsize=50)
+#             self._subscribers[location_id].add(queue)
+#             logger.info(f"New subscriber for location {location_id}")
+#             return queue
     
-    async def unsubscribe(self, location_id: str, queue: asyncio.Queue):
-        """Unsubscribe dari stream events"""
-        async with self._lock:
-            if location_id in self._subscribers:
-                self._subscribers[location_id].discard(queue)
-                if not self._subscribers[location_id]:
-                    del self._subscribers[location_id]
-                logger.info(f"Subscriber removed from location {location_id}")
+#     async def unsubscribe(self, location_id: str, queue: asyncio.Queue):
+#         """Unsubscribe dari stream events"""
+#         async with self._lock:
+#             if location_id in self._subscribers:
+#                 self._subscribers[location_id].discard(queue)
+#                 if not self._subscribers[location_id]:
+#                     del self._subscribers[location_id]
+#                 logger.info(f"Subscriber removed from location {location_id}")
     
-    async def publish(self, location_id: str, event_data: Dict):
-        """Publish event ke semua subscribers"""
-        async with self._lock:
-            if location_id not in self._subscribers:
-                return
+#     async def publish(self, location_id: str, event_data: Dict):
+#         """Publish event ke semua subscribers"""
+#         async with self._lock:
+#             if location_id not in self._subscribers:
+#                 return
             
-            dead_queues = set()
-            for queue in self._subscribers[location_id]:
-                try:
-                    queue.put_nowait(event_data)
-                except asyncio.QueueFull:
-                    logger.warning(f"Queue full for location {location_id}")
-                    dead_queues.add(queue)
+#             dead_queues = set()
+#             for queue in self._subscribers[location_id]:
+#                 try:
+#                     queue.put_nowait(event_data)
+#                 except asyncio.QueueFull:
+#                     logger.warning(f"Queue full for location {location_id}")
+#                     dead_queues.add(queue)
             
-            # Cleanup dead queues
-            self._subscribers[location_id] -= dead_queues
+#             # Cleanup dead queues
+#             self._subscribers[location_id] -= dead_queues
 
 class MediaMTXService:
     def __init__(self):
@@ -100,7 +97,6 @@ class MediaMTXService:
             raise
 
     async def close(self):
-        """Cleanup resources"""
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
@@ -258,7 +254,7 @@ class StreamService:
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
         self.mediamtx_service = MediaMTXService()
-        self.event_manager = StreamEventManager()
+        # self.event_manager = StreamEventManager()
     
     async def get_stream_urls(self, cctv_id: int) -> Dict:
         """Get stream URLs untuk single CCTV"""
@@ -266,7 +262,6 @@ class StreamService:
         if not cctv:
             raise HTTPException(status_code=404, detail="CCTV tidak ditemukan")
         
-        # Test MediaMTX connection
         mediamtx_online = await self.mediamtx_service.test_mediamtx_connection()
         
         if not mediamtx_online:
@@ -279,20 +274,17 @@ class StreamService:
                 "note": "MediaMTX server offline"
             }
         
-        # Ensure stream exists
         rtsp_source_url = self.mediamtx_service.generate_rtsp_source_url(cctv.ip_address)
         stream_registered = await self.mediamtx_service.ensure_stream(
             cctv.stream_key,
             rtsp_source_url
         )
         
-        # Get actual status
         status_map = await self.mediamtx_service.get_all_streams_status([cctv.stream_key])
         stream_info = status_map.get(cctv.stream_key)
         
         is_active = stream_info.status == StreamStatus.ACTIVE if stream_info else False
         
-        # Update database
         self.cctv_repository.update_streaming_status(cctv_id, is_active)
         
         return {
@@ -324,7 +316,6 @@ class StreamService:
         }
         
         if not mediamtx_online:
-            # Return basic info when MediaMTX is offline
             for cam in cameras:
                 location_streams["cameras"].append({
                     "cctv_id": cam.id_cctv,
@@ -369,63 +360,51 @@ class StreamService:
             })
         
         # Publish event untuk SSE subscribers
-        await self.event_manager.publish(
-            str(location_id),
-            {
-                "event": "location_streams_updated",
-                "data": location_streams,
-                "timestamp": datetime.now().isoformat()
-            }
-        )
+        # await self.event_manager.publish(
+        #     str(location_id),
+        #     {
+        #         "event": "location_streams_updated",
+        #         "data": location_streams,
+        #         "timestamp": datetime.now().isoformat()
+        #     }
+        # )
         
         return location_streams
     
-    async def stream_location_events(self, location_id: int):
-        """
-        SSE endpoint untuk realtime stream updates
-        Usage: GET /streams/location/{location_id}/events
-        """
-        queue = await self.event_manager.subscribe(str(location_id))
+    # async def stream_location_events(self, location_id: int):
+    #     """
+    #     SSE endpoint untuk realtime stream updates
+    #     Usage: GET /streams/location/{location_id}/events
+    #     """
+    #     queue = await self.event_manager.subscribe(str(location_id))
         
-        async def event_generator():
-            try:
-                # Send initial connection message
-                yield f"data: {json.dumps({'event': 'connected', 'location_id': location_id})}\n\n"
+    #     async def event_generator():
+    #         try:
+    #             # Send initial connection message
+    #             yield f"data: {json.dumps({'event': 'connected', 'location_id': location_id})}\n\n"
                 
-                while True:
-                    # Wait for events with timeout
-                    try:
-                        event_data = await asyncio.wait_for(queue.get(), timeout=30.0)
-                        yield f"data: {json.dumps(event_data)}\n\n"
-                    except asyncio.TimeoutError:
-                        # Send heartbeat
-                        yield f"data: {json.dumps({'event': 'heartbeat', 'timestamp': datetime.now().isoformat()})}\n\n"
+    #             while True:
+    #                 # Wait for events with timeout
+    #                 try:
+    #                     event_data = await asyncio.wait_for(queue.get(), timeout=30.0)
+    #                     yield f"data: {json.dumps(event_data)}\n\n"
+    #                 except asyncio.TimeoutError:
+    #                     # Send heartbeat
+    #                     yield f"data: {json.dumps({'event': 'heartbeat', 'timestamp': datetime.now().isoformat()})}\n\n"
                         
-            except asyncio.CancelledError:
-                logger.info(f"SSE connection cancelled for location {location_id}")
-            finally:
-                await self.event_manager.unsubscribe(str(location_id), queue)
+    #         except asyncio.CancelledError:
+    #             logger.info(f"SSE connection cancelled for location {location_id}")
+    #         finally:
+    #             await self.event_manager.unsubscribe(str(location_id), queue)
         
-        return StreamingResponse(
-            event_generator(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
-            }
-        )
+    #     return StreamingResponse(
+    #         event_generator(),
+    #         media_type="text/event-stream",
+    #         headers={
+    #             "Cache-Control": "no-cache",
+    #             "Connection": "keep-alive",
+    #             "X-Accel-Buffering": "no"
+    #         }
+    #     )
     
-    async def monitor_streams_background(self, location_id: int, interval: int = 10):
-        """
-        Background task untuk monitoring streams dan push updates via SSE
-        Jalankan ini sebagai background task di startup
-        """
-        while True:
-            try:
-                streams_data = await self.get_streams_by_location(location_id)
-                # Event sudah di-publish di get_streams_by_location
-                await asyncio.sleep(interval)
-            except Exception as e:
-                logger.error(f"Error monitoring location {location_id}: {e}")
-                await asyncio.sleep(interval)
+   
