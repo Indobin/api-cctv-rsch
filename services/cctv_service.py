@@ -17,9 +17,8 @@ class CctvService:
         self.location_repository= location_repository
         self.mediamtx_service = MediaMTXService()
 
-    def get_all_cctv(self, skip: int = 0, limit: int = 50 ):
-        users = self.cctv_repository.get_all(skip, limit)
-        return [CctvResponse.from_orm(u) for u in users]
+    def get_all_cctv(self, skip: int = 0, limit: int = 500 ):
+        return self.cctv_repository.get_all(skip, limit)
        
     def create_cctv(self, cctv: CctvCreate):
         existing_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
@@ -56,8 +55,10 @@ class CctvService:
 
         try:
             db_cctv = self.cctv_repository.create(cctv_data)
+            db_location = self.location_repository.get_by_id(db_cctv.id_location)
+            db_cctv.cctv_location_name = db_location.nama_lokasi
+            return db_cctv
             
-            return CctvResponse.from_orm(db_cctv)
             
         except Exception as e:
             raise HTTPException(
@@ -109,8 +110,9 @@ class CctvService:
         }
 
         db_cctv = self.cctv_repository.update(cctv_id,cctv_data)
-        
-        return CctvResponse.from_orm(db_cctv)
+        db_location = self.location_repository.get_by_id(db_cctv.id_location)
+        db_cctv.cctv_location_name = db_location.nama_lokasi
+        return db_cctv
 
     def soft_delete_cctv(self, cctv_id: int):
         cctv = self.cctv_repository.soft_delete(cctv_id)

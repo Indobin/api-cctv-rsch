@@ -1,18 +1,12 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import session
-from database import get_db
-from repositories.notification_repository import NotificationRepository
-from repositories.history_repository import HistoryRepository
-from repositories.cctv_repository import CctvRepository
-from repositories.user_repository import UserRepository
+from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import NotificationRepository, HistoryRepository, CctvRepository, UserRepository
 from services.notification_service import NotificationService
 from schemas.notification_schemas import NotificationResponse, WebhookDisconnect, WebhookConnect
-from core.auth import all_roles
-from core.response import success_response
+
 
 router = APIRouter(prefix="/notification", tags=["notifications"])
 
-def get_notification_service(db: session = Depends(get_db)):
+def get_notification_service(db: Session = Depends(get_db)):
     notification_repo = NotificationRepository(db)
     history_repo = HistoryRepository(db)
     cctv_repo = CctvRepository(db)

@@ -21,6 +21,7 @@ class CctvBase(BaseModel):
 class CctvCreate(CctvBase):
     pass
 
+
 class CctvUpdate(BaseModel):
     titik_letak: Optional[str] = Field(None,min_length=3, max_length=200)
     ip_address: Optional[str] = Field(
@@ -40,12 +41,9 @@ class CctvUpdate(BaseModel):
             return v
         except ValueError:
             raise ValueError("ip_address harus berupa format IPv4 yang valid.")
+    updated_at: Optional[datetime]= None
 
-class CctvDelete(BaseModel):
-    # message: str
-    deleted_at: Optional[datetime] = None
-    class Config:
-        from_attributes =True
+   
     
 class CctvResponse(CctvBase):
     id_cctv: int
@@ -66,10 +64,4 @@ class StreamUrlsResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# Buat schema untuk success response wrapper
-class SuccessResponse(BaseModel):
-    # status: str = "success"
-    message: str
-    data: Optional[StreamUrlsResponse] = None  
 
-    model_config = ConfigDict(from_attributes=True)

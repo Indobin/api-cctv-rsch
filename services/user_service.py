@@ -7,8 +7,8 @@ class UserService:
         self.user_repository = user_repository
 
     def get_all_users(self, skip: int = 0, limit: int = 50 ):
-        users = self.user_repository.get_all(skip, limit)
-        return [UserResponse.from_orm(u) for u in users]
+        return self.user_repository.get_all(skip, limit)
+       
     
     def create_user(self, user: UserCreate):
         existing_nip = self.user_repository.get_by_nip(user.nip)

@@ -1,16 +1,26 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from database import get_db
-from schemas.history_schemas import HistoryResponse, HistoryCreate, HistoryUpdate, HistoryDelete
-from repositories.history_repository import HistoryRepository
+from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import HistoryRepository, CctvRepository, UserRepository
+from schemas.history_schemas import HistoryResponse, HistoryCreate, HistoryUpdate
 from services.history_service import HistoryService
-from core.auth import all_roles
-from core.response import success_response
 
 router = APIRouter(prefix="/history", tags=["history"])
 
 def get_history_service(db: Session = Depends(get_db)):
     history_repo = HistoryRepository(db)
-    return HistoryService(history_repo)
+    cctv_repo = CctvRepository(db)
+    user_repo = UserRepository(db)
+    return HistoryService(history_repo, cctv_repo, user_repo)
 
-# @router.get("/")
+@router.get("/")
+def read_history(
+    skip: int = 0,
+    limit: int = 1000,
+    service: HistoryService = Depends(get_history_service),
+    user_role = Depends(all_roles)
+):
+    histories = service.get_all_hisotries(skip, limit)
+    response_data = [HistoryResponse.from_orm(loc) for loc in histories]
+    return success_response(
+            message="Daftar semua history",
+            data=response_data
+    )

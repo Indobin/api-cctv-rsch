@@ -1,13 +1,9 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from database import get_db
-from schemas.location_schemas import LocationResponse, LocationCreate, LocationUpdate, LocationDelete
-from repositories.location_repository import LocationRepository
+from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import LocationRepository
+from schemas.location_schemas import LocationResponse, LocationCreate, LocationUpdate
 from services.location_service import LocationService
-from core.auth import all_roles
-from core.response import success_response
 
-router = APIRouter(prefix="/location", tags=["location"])
+router = APIRouter(prefix="/location", tags=["locations"])
 
 def get_location_service(db: Session = Depends(get_db)):
     location_repository = LocationRepository(db)
@@ -21,9 +17,10 @@ def read_location(
     user_role = Depends(all_roles)
 ):
     locations = service.get_all_location(skip, limit)
+    response_data = [LocationResponse.from_orm(loc) for loc in locations]
     return success_response(
-            message="Locations retrieved successfully",
-            data=locations
+            message="Daftar semua lokasi",
+            data=response_data
         )
 
 
@@ -35,9 +32,12 @@ def create_location(
     user_role = Depends(all_roles)
 ):
     created = service.create_location(location)
-    return success_response("Lokasi berhasil ditambahkan", LocationResponse.from_orm(created))
+    return success_response(
+        message="Lokasi berhasil ditambahkan", 
+        data=LocationResponse.from_orm(created)
+    )
 
-@router.put("/{location_id}", response_model=dict)
+@router.put("/{location_id}")
 def update_location(
     location_id: int,
     location: LocationUpdate,
@@ -45,7 +45,10 @@ def update_location(
     user_role = Depends(all_roles)
 ):
     updated = service.update_location(location_id, location)
-    return success_response("Lokasi berhasil diperbarui", LocationResponse.from_orm(updated))
+    return success_response(
+        message="Lokasi berhasil diperbarui", 
+        data=LocationResponse.from_orm(updated)
+    )
 
 @router.delete("/", response_model=dict)
 def hard_delete_location(
@@ -54,4 +57,7 @@ def hard_delete_location(
     user_role = Depends(all_roles)
 ):
     deleted = service.hard_delete_location(location_id)
-    return success_response("Lokasi berhasil dihapus", LocationDelete.from_orm(deleted))
+    return success_response(
+        message="Lokasi berhasil dihapus", 
+        data=LocationResponse.from_orm(deleted)
+    )

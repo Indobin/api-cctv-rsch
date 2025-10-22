@@ -20,7 +20,7 @@ class UserRepository:
                 User.id_role,
                 Role.nama_role.label("user_role_name"),  
                 func.to_char(func.timezone('Asia/Jakarta', User.created_at), 'YYYY-MM-DD HH24:MI:SS').label("created_at"),
-                func.to_char(func.timezone('Asia/Jakarta', User.updated_at), 'YYYY-MM-DD HH24:MI:SS').label("updated_at"),
+                func.to_char(func.timezone('Asia/Jakarta', User.last_login), 'YYYY-MM-DD HH24:MI:SS').label("last_login"),
                 func.to_char(func.timezone('Asia/Jakarta', User.deleted_at), 'YYYY-MM-DD HH24:MI:SS').label("deleted_at"),
             )
             .join(Role, User.id_role == Role.id_role)

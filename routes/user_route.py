@@ -1,9 +1,6 @@
-from fastapi import APIRouter, Depends, File, UploadFile
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
-from database import get_db
-from schemas.user_schemas import UserResponse, UserCreate, UserUpdate, UserDelete
+from.base import APIRouter, Depends, Session, get_db, success_response, File, UploadFile, FileResponse
 from repositories.user_repository import UserRepository
+from schemas.user_schemas import UserResponse, UserCreate, UserUpdate
 from services.user_service import UserService
 from core.auth import superadmin_role
 
@@ -13,13 +10,6 @@ def get_user_service(db: Session = Depends(get_db)):
     user_repo = UserRepository(db)
     return UserService(user_repo)
 
-def success_response(message: str, data=None):
-    return{
-        "status": "success",
-        "message": message,
-        "data": data
-    }
-
 @router.get("/", response_model=dict)
 def read_users(
     skip: int = 0,
@@ -28,9 +18,13 @@ def read_users(
     user_role = Depends(superadmin_role)
 ):
     users = service.get_all_users(skip, limit)
-    return success_response("Daftar pengguna berhasil ditampilkan", users)
+    response_data = [UserResponse.from_orm(user) for user in users]
+    return success_response(
+        message="Daftar semua users", 
+        data=response_data
+    )
 
-@router.post("/", response_model=dict)
+@router.post("/")
 def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
@@ -38,9 +32,12 @@ def create_user(
     # user_role = Depends(superadmin_role)
 ):
     new_user = service.create_user(user)
-    return success_response("User berhasil ditambahkan", UserResponse.from_orm(new_user))
+    return success_response(
+        message="User berhasil ditambahkan", 
+        data=UserResponse.from_orm(new_user)
+    )
 
-@router.put("/{user_id}", response_model=dict)
+@router.put("/{user_id}")
 def update_user(
     user_id: int,
     user: UserUpdate,
@@ -48,26 +45,33 @@ def update_user(
     user_role = Depends(superadmin_role)
 ):
     updated = service.update_user(user_id, user)
-    return success_response("User berhasil diperbarui", UserResponse.from_orm(updated))
+    return success_response(
+        message="User berhasil diperbarui", 
+        data=UserResponse.from_orm(updated)
+    )
 
-@router.delete("/soft/{user_id}", response_model=dict)
+@router.delete("/soft/{user_id}")
 def soft_delete_user(
     user_id: int,
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ): 
     deleted = service.soft_delete_user(user_id)
-    return success_response("User berhasil di-soft delete", UserDelete.from_orm(deleted))
+    return success_response(
+        message="User berhasil di-soft delete", 
+        data=UserResponse.from_orm(deleted))
 
-@router.delete("/hard/{user_id}", response_model=dict)
+@router.delete("/hard/{user_id}")
 def hard_delete_user(
     user_id: int,
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ):
     deleted = service.hard_delete_user(user_id)
-    return success_response("User berhasil di-hard delete", UserDelete.from_orm(deleted))
-
+    return success_response(
+        message="User berhasil di-hard delete", 
+        data=deleted
+    )
 @router.get("/export")
 def export_users(
     file_type: str = "xlsx",
