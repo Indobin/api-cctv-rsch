@@ -1,4 +1,4 @@
-from.base import BaseModel, datetime, Field, Optional
+from.base import BaseModel, Field, Optional
 
 class LocationBase(BaseModel):
     nama_lokasi: str = Field(min_length=5, max_length=200)

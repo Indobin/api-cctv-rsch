@@ -1,4 +1,4 @@
-from.base import Base, Column, Integer, String, relationship, func
+from.base import Base, Column, Integer, String, relationship
 
 class Role(Base):
     __tablename__ = "role"

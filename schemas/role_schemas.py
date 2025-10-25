@@ -1,4 +1,4 @@
-from.base import BaseModel, datetime
+from.base import BaseModel
 
 class RoleBase(BaseModel):
     nama_role: str

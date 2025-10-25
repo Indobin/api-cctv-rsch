@@ -1,4 +1,4 @@
-from.base import Base, Column, relationship, ForeignKey, Integer, Boolean
+from.base import Base, Column, relationship, ForeignKey, Integer
 
 class Notification(Base):
     __tablename__ = "notification"

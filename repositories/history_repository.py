@@ -1,27 +1,34 @@
 from.base import Session, History, CctvCamera
+from sqlalchemy import func
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 class HistoryRepository:
     def __init__(self, db: Session):
         self.db = db
 
     def get_all(self, skip: int = 0, limit: int = 50):
-        return( self.db.query(
-            History.id_history,
-            CctvCamera.titik_letak.label("cctv_titik_letak"),
-            History.note,
-            History.created_at,
-            History.service
-        )
-        .join(CctvCamera, History.id_cctv == CctvCamera.id_cctv)
-        .offset(skip)
-        .limit(limit)
-        .all()
+        return (
+            self.db.query(
+                History.id_history,
+                History.id_cctv,
+                History.note,
+                History.service,
+                func.to_char(func.timezone('Asia/Jakarta', History.created_at), 'YYYY-MM-DD HH24:MI:SS').label("created_at"),
+                CctvCamera.titik_letak.label("cctv_name")
+            )
+            .join(CctvCamera, History.id_cctv == CctvCamera.id_cctv)
+            .offset(skip)
+            .limit(limit)
+            .all()
         )
 
-    def create(self, cctv_id: int, history: History):
+
+    def create(self,  history: History):
        db_history = History(
-           id_cctv = cctv_id,
+           id_cctv = history.id_cctv,
            note = history.note
+           # service = False
        )
        self.db.add(db_history)
        self.db.commit()
@@ -53,4 +60,4 @@ class HistoryRepository:
             db_history.service = history.service
         self.db.commit()
         self.db.refresh(db_history)
-        return history
+        return db_history

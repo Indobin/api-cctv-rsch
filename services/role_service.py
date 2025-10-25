@@ -1,5 +1,5 @@
 from repositories.role_repository import RoleRepository
-from schemas.role_schemas import RoleResponse, RoleCreate
+from schemas.role_schemas import RoleCreate
 from fastapi import HTTPException, status
 class RoleService:
     def __init__(self, role_repository: RoleRepository):

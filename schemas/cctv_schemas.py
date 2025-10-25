@@ -1,4 +1,4 @@
-from.base import BaseModel, datetime, Optional, Field, field_validator, ConfigDict
+from.base import BaseModel, datetime, Optional, Field, field_validator
 from ipaddress import IPv4Address
 
 class CctvBase(BaseModel):
@@ -41,7 +41,6 @@ class CctvUpdate(BaseModel):
             return v
         except ValueError:
             raise ValueError("ip_address harus berupa format IPv4 yang valid.")
-    updated_at: Optional[datetime]= None
 
    
     

@@ -1,12 +1,11 @@
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
-from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse
+from schemas.cctv_schemas import CctvCreate, CctvUpdate
 from fastapi import HTTPException, status
 from services.mediamtx_service import MediaMTXService
 import pandas as pd
-import asyncio
 import logging
-from typing import Dict
+# from typing import Dict
 import uuid
 logger = logging.getLogger(__name__)
 
