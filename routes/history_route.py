@@ -24,3 +24,28 @@ def read_history(
             message="Daftar semua history",
             data=response_data
     )
+    
+@router.post("/")
+def create_history(
+    history: HistoryCreate,
+    service: HistoryService = Depends(get_history_service),
+    user_role = Depends(all_roles)
+):
+    created = service.create_history(history)
+    return success_response(
+            message="History berhasil ditambahkan",
+            data=HistoryResponse.from_orm(created)
+    )
+    
+@router.put("/{history_id}")
+def update_history(
+    history_id: int,
+    history: HistoryUpdate,
+    service: HistoryService = Depends(get_history_service),
+    user_role = Depends(all_roles)
+):
+    updated = service.update_history(history_id, history)
+    return success_response(
+            message="History berhasil diperbarui",
+            data=HistoryResponse.from_orm(updated)
+    )

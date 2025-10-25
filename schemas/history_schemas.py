@@ -1,8 +1,8 @@
 from.base import BaseModel, Optional, datetime, Field
 
 class HistoryBase(BaseModel):
-    service: bool
-    note: Optional[str]
+    id_cctv: int = Field(gt=0)
+    note: str = Field(None,min_length=5, max_length=255)
 
 class HistoryCreate(HistoryBase):
     pass
@@ -13,8 +13,8 @@ class HistoryUpdate(BaseModel):
 
 class HistoryResponse(HistoryBase):
     id_history: int
-    id_cctv: int
+    service: bool
     created_at: Optional[datetime]= None
     cctv_name: Optional[str] = None
     class Config:
-        from_aattributes =True
+        from_attributes =True

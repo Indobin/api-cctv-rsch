@@ -1,5 +1,4 @@
-from.base import BaseModel, datetime, Optional, Field, field_validator, ConfigDict
-from .role_schemas import RoleResponse
+from.base import BaseModel, datetime, Optional, Field
 
 class UserBase(BaseModel):
     nama: str = Field(min_length=5, max_length=200)
