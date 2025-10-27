@@ -15,6 +15,7 @@ class CctvRepository:
                 CctvCamera.ip_address,
                 CctvCamera.is_streaming,
                 CctvCamera.id_location,
+                CctvCamera.stream_key,
                 Location.nama_lokasi.label("cctv_location_name"),  
                 func.to_char(func.timezone('Asia/Jakarta', CctvCamera.created_at), 'YYYY-MM-DD HH24:MI:SS').label("created_at"),
                 func.to_char(func.timezone('Asia/Jakarta', CctvCamera.updated_at), 'YYYY-MM-DD HH24:MI:SS').label("updated_at"),

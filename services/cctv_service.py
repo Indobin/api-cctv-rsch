@@ -14,7 +14,7 @@ class CctvService:
     def __init__(self, cctv_repository: CctvRepository, location_repository: LocationRepository):
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
-        self.mediamtx_service = MediaMTXService()
+        # self.mediamtx_service = MediaMTXService()
 
     def get_all_cctv(self, skip: int = 0, limit: int = 500 ):
         return self.cctv_repository.get_all(skip, limit)

@@ -14,7 +14,10 @@ class HistoryUpdate(BaseModel):
 class HistoryResponse(HistoryBase):
     id_history: int
     service: bool
+    status: bool
     created_at: Optional[datetime]= None
     cctv_name: Optional[str] = None
+    cctv_ip: Optional[str] = None
+    location_name: Optional[str] = None
     class Config:
         from_attributes =True

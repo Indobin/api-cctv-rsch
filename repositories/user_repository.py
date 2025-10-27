@@ -3,6 +3,7 @@ from sqlalchemy import func
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from core.security import verify_password
+from typing import List
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -38,6 +39,10 @@ class UserRepository:
 
     def get_by_nip(self, nip: str):
         return self.db.query(User).filter(User.nip == nip).first()
+    
+    def get_all_id(self) -> List[int]:
+        results = self.db.query(User.id_user).all()
+        return [row.id_user for row in results]
     
     def get_by_id(self, user_id: int):
         return self.db.query(User).filter(User.id_user == user_id).first()
