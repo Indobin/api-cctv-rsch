@@ -1,8 +1,10 @@
-from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import APIRouter, Depends, Session, get_db, all_roles, success_response, Request, Query
 from.base import NotificationRepository, HistoryRepository, CctvRepository, UserRepository
 from services.notification_service import NotificationService
 from schemas.notification_schemas import NotificationResponse, WebhookDisconnect, WebhookConnect
+import logging
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notification", tags=["notifications"])
 
@@ -87,21 +89,3 @@ def webhook_disconnect(
         data=result
     )
 
-@router.post("/stream-connect")
-def webhook_connect(
-    payload: WebhookConnect,
-    service: NotificationService = Depends(get_notification_service)
-):
-   
-    result = service.handle_webhook_connect(
-        stream_key=payload.stream_key,
-        metadata=payload.metadata
-    )
-    
-    # if not result["success"]:
-    #     raise HTTPException(status_code=404, detail=result["message"])
-    
-    return success_response(
-        "Webhook connect berhasil diproses",
-        data=result
-    )

@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime
 from fastapi import HTTPException
@@ -14,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 class StreamStatus(str, Enum):
     ACTIVE = "active"
+    OFFLINE = "offline"
     INACTIVE = "inactive"
     CONNECTING = "connecting"
-    ERROR = "error"
-
-
+    ERROR = "error" 
+    
 @dataclass
 class StreamInfo:
     stream_key: str
@@ -28,57 +29,13 @@ class StreamInfo:
     last_updated: datetime
     error_message: Optional[str] = None
 
-# class StreamEventManager:
-#     """Manager untuk SSE events tanpa Redis"""
-    
-#     def __init__(self):
-#         self._subscribers: Dict[str, Set[asyncio.Queue]] = {}
-#         self._lock = asyncio.Lock()
-    
-#     async def subscribe(self, location_id: str) -> asyncio.Queue:
-#         """Subscribe ke stream events untuk lokasi tertentu"""
-#         async with self._lock:
-#             if location_id not in self._subscribers:
-#                 self._subscribers[location_id] = set()
-            
-#             queue = asyncio.Queue(maxsize=50)
-#             self._subscribers[location_id].add(queue)
-#             logger.info(f"New subscriber for location {location_id}")
-#             return queue
-    
-#     async def unsubscribe(self, location_id: str, queue: asyncio.Queue):
-#         """Unsubscribe dari stream events"""
-#         async with self._lock:
-#             if location_id in self._subscribers:
-#                 self._subscribers[location_id].discard(queue)
-#                 if not self._subscribers[location_id]:
-#                     del self._subscribers[location_id]
-#                 logger.info(f"Subscriber removed from location {location_id}")
-    
-#     async def publish(self, location_id: str, event_data: Dict):
-#         """Publish event ke semua subscribers"""
-#         async with self._lock:
-#             if location_id not in self._subscribers:
-#                 return
-            
-#             dead_queues = set()
-#             for queue in self._subscribers[location_id]:
-#                 try:
-#                     queue.put_nowait(event_data)
-#                 except asyncio.QueueFull:
-#                     logger.warning(f"Queue full for location {location_id}")
-#                     dead_queues.add(queue)
-            
-#             # Cleanup dead queues
-#             self._subscribers[location_id] -= dead_queues
-
 class MediaMTXService:
-    def __init__(self):
+    def __init__(self, cctv_repository: CctvRepository,):
         self.api_base_url = "http://127.0.0.1:9997/v3"
         self.stream_base_url = "http://127.0.0.1:8888"
         self.rtsp_port = 8554
         self.http_port = 8888
-        
+        self.cctv_repo = cctv_repository
         # Connection pooling untuk efisiensi
         self._client: Optional[httpx.AsyncClient] = None
         self._connection_timeout = 5.0
@@ -110,88 +67,144 @@ class MediaMTXService:
             logger.warning(f"MediaMTX connection test failed: {e}")
             return False
     
-    async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
-        """
-        Get status semua streams dengan filtering optional
-        Returns StreamInfo objects untuk better type safety
-        """
+    async def _ping_ip(self, ip: str) -> bool:
+        """Ping IP CCTV untuk memastikan perangkat hidup."""
         try:
-            async with self._get_client() as client:
-                response = await client.get(f"{self.api_base_url}/paths/list")
-                
-                if response.status_code != 200:
-                    return {}
-                
-                data = response.json()
-                status_map = {}
-                for stream in data.get('items', []):
-                    stream_key = stream['name']
-                    
-                    # Filter jika stream_keys diberikan
-                    if stream_keys and stream_key not in stream_keys:
-                        continue
-                    
-                    has_source = stream.get('source') is not None
-                    source_ready = stream.get('ready', False)
-                    
-                    # Determine status
-                    if source_ready:
-                        status = StreamStatus.ACTIVE
-                    elif has_source:
-                        status = StreamStatus.CONNECTING
-                    else:
-                        status = StreamStatus.INACTIVE
-                    
-                    status_map[stream_key] = StreamInfo(
-                        stream_key=stream_key,
-                        status=status,
-                        has_source=has_source,
-                        source_ready=source_ready,
-                        last_updated=datetime.now()
-                    )
-                
-                return status_map
+            proc = await asyncio.create_subprocess_exec(
+                "ping", "-c", "1", "-W", "1", ip,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            await proc.communicate()
+            return proc.returncode == 0
         except Exception as e:
-            logger.warning(f"Error getting all streams status: {e}")
-            return {}
-
-
-    async def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
-        """Register stream ke MediaMTX dengan retry logic"""
-        path_config = {
-            "source": rtsp_source_url,
-            "sourceProtocol": "tcp",
-            "sourceOnDemand": True,  # Ubah ke True untuk save resources
-            # "readTimeout": "15s",
-            "runOnReady": "",
-            "runOnRead": ""
-        }
-        
-        for attempt in range(self._max_retries):
+            logger.warning(f"Ping failed for {ip}: {e}")
+            return False
+            
+    async def get_all_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
+            """
+            Get status semua streams dengan filtering optional
+            Returns StreamInfo objects untuk better type safety
+            """
             try:
                 async with self._get_client() as client:
-                    response = await client.post(
-                        f"{self.api_base_url}/config/paths/add/{stream_key}",
-                        json=path_config,
-                    )
-                
-                if response.status_code == 200:
-                    logger.info(f"Stream {stream_key} registered successfully")
-                    return True
-                elif response.status_code == 409:
-                    # Stream already exists
-                    logger.info(f"Stream {stream_key} already exists")
-                    return True
-                else:
-                    logger.warning(f"Failed to register stream {stream_key}: {response.text}")
+                    response = await client.get(f"{self.api_base_url}/paths/list")
                     
+                    if response.status_code != 200:
+                        return {}
+                    
+                    data = response.json()
+                    status_map = {}
+                    for stream in data.get('items', []):
+                        stream_key = stream['name']
+                        
+                        # Filter jika stream_keys diberikan
+                        if stream_keys and stream_key not in stream_keys:
+                            continue
+                        
+                        has_source = stream.get('source') is not None
+                        source_ready = stream.get('ready', False)
+                        
+                        # Determine status
+                        if source_ready:
+                            status = StreamStatus.ACTIVE
+                        elif has_source:
+                            status = StreamStatus.CONNECTING
+                        else:
+                            status = StreamStatus.INACTIVE
+                        
+                        status_map[stream_key] = StreamInfo(
+                            stream_key=stream_key,
+                            status=status,
+                            has_source=has_source,
+                            source_ready=source_ready,
+                            last_updated=datetime.now()
+                        )
+                    
+                    return status_map
             except Exception as e:
-                logger.warning(f"Attempt {attempt + 1} failed for {stream_key}: {e}")
-                if attempt < self._max_retries - 1:
-                    await asyncio.sleep(1)
-        
-        return False
+                logger.warning(f"Error getting all streams status: {e}")
+                return {}        
     
+    async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
+        """
+        Kombinasi cek MediaMTX + Ping IP, menggunakan httpx client pool.
+        """
+        
+        cctvs = self.cctv_repo.get_all()
+        status_map = {}
+    
+        async with self._get_client() as client:
+            response = await client.get(f"{self.api_base_url}/paths/list")
+            data = response.json() if response.status_code == 200 else {"items": []}
+    
+        # Jalankan ping secara paralel
+        ping_tasks = {cam.ip_address: asyncio.create_task(self._ping_ip(cam.ip_address)) for cam in cctvs}
+        ping_results = {ip: await task for ip, task in ping_tasks.items()}
+    
+        for cam in cctvs:
+            ip_reachable = ping_results.get(cam.ip_address, False)
+            # KODE PERBAIKAN: Menambahkan pengecekan tipe data
+            stream_data = next(
+                (item for item in data.get("items", [])
+                 # Cek dulu apakah item adalah dict DAN punya key 'name'
+                 if isinstance(item, dict) and item.get("name") == cam.stream_key), 
+                None
+            )
+    
+            if stream_data and stream_data.get("ready", False):
+                status = StreamStatus.ACTIVE
+            elif ip_reachable:
+                status = StreamStatus.CONNECTING
+            else:
+                status = StreamStatus.OFFLINE
+    
+            status_map[cam.stream_key] = StreamInfo(
+                stream_key=cam.stream_key,
+                status=status,
+                has_source=stream_data is not None,
+                source_ready=stream_data.get("ready", False) if stream_data else False,
+                last_updated=datetime.now()
+            )
+    
+        return status_map
+
+    async def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
+            """Register stream ke MediaMTX dengan retry logic"""
+            path_config = {
+                "source": rtsp_source_url,
+                "sourceProtocol": "tcp",
+                "sourceOnDemand": True,  # Ubah ke True untuk save resources
+                # "readTimeout": "15s",
+                "runOnReady": "",
+                "runOnRead": ""
+            }
+            
+            for attempt in range(self._max_retries):
+                try:
+                    async with self._get_client() as client:
+                        response = await client.post(
+                            f"{self.api_base_url}/config/paths/add/{stream_key}",
+                            json=path_config,
+                        )
+                    
+                    if response.status_code == 200:
+                        logger.info(f"Stream {stream_key} registered successfully")
+                        return True
+                    elif response.status_code == 409:
+                        # Stream already exists
+                        logger.info(f"Stream {stream_key} already exists")
+                        return True
+                    else:
+                        logger.warning(f"Failed to register stream {stream_key}: {response.text}")
+                        
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt + 1} failed for {stream_key}: {e}")
+                    if attempt < self._max_retries - 1:
+                        await asyncio.sleep(1)
+            
+            return False
+            
     async def ensure_stream(self, stream_key: str, rtsp_source_url: str) -> bool:
         """Pastikan stream ada dengan idempotent operation"""
         try:
@@ -253,7 +266,7 @@ class StreamService:
     def __init__(self, cctv_repository: CctvRepository, location_repository: LocationRepository):
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
-        self.mediamtx_service = MediaMTXService()
+        self.mediamtx_service = MediaMTXService(cctv_repository=cctv_repository)
         # self.event_manager = StreamEventManager()
     
     async def get_stream_urls(self, cctv_id: int) -> Dict:
@@ -339,7 +352,7 @@ class StreamService:
         
         # Get status for all streams in location
         stream_keys = [cam.stream_key for cam in cameras]
-        all_status = await self.mediamtx_service.get_all_streams_status(stream_keys)
+        all_status = await self.mediamtx_service.get_all_status(stream_keys)
         
         # Build response and update database
         for cam in cameras:
@@ -358,16 +371,6 @@ class StreamService:
                 "stream_urls": self.mediamtx_service.generate_stream_urls(cam.stream_key),
                 "stream_status": stream_info.status.value if stream_info else "unknown"
             })
-        
-        # Publish event untuk SSE subscribers
-        # await self.event_manager.publish(
-        #     str(location_id),
-        #     {
-        #         "event": "location_streams_updated",
-        #         "data": location_streams,
-        #         "timestamp": datetime.now().isoformat()
-        #     }
-        # )
         
         return location_streams
     
