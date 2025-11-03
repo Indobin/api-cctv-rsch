@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 from datetime import datetime
 from fastapi import HTTPException, status
 import logging
-
+import asyncio
 logger = logging.getLogger(__name__)
 
 
@@ -25,164 +25,84 @@ class NotificationService:
         self.user_repo = user_repo
         self.notification_tracker: Dict[str, Dict] = {}
    
-    def _create_notification(self, cctv_id: int, note: str):
-            """Create notification for all users"""
+   
+    async def create_notification(self, cctv_id: int, note: str):
+        logger.info(f"🔵 ENTER create_notification: cctv_id={cctv_id}")
+        latest_history = self.history_repo.get_latest_by_cctv(cctv_id)
+        if latest_history is None or latest_history.service is True:
             try:
-                user_ids = self.user_repo.get_all_id()
                 
-                # Create history entry
-                history = self.history_repo.create_notif(cctv_id, note)
+                logger.info(f"🔵 Step 1: Getting user IDs...")
+                user_ids = await asyncio.to_thread(self.user_repo.get_all_id)
+                logger.info(f"🟢 Step 1 DONE: Found {len(user_ids)} users: {user_ids}")
                 
-                # Create notification for each user
+                logger.info(f"🔵 Step 2: Creating history...")
+                history = await asyncio.to_thread(
+                    self.history_repo.create_history,
+                    cctv_id,
+                    note
+                )
+                logger.info(f"🟢 Step 2 DONE: History ID={history.id_history}")
+                
+                logger.info(f"🔵 Step 3: Creating notifications...")
                 notification_count = 0
                 for user_id in user_ids:
-                    self.notification_repo.create(user_id, history.id_history)
+                    logger.debug(f"   Creating notification for user {user_id}...")
+                    await asyncio.to_thread(
+                        self.notification_repo.create,
+                        user_id, 
+                        history.id_history
+                    )
                     notification_count += 1
+                    logger.debug(f"   ✓ Notification {notification_count} created")
                 
-                logger.info(f"✅ Notification created for CCTV {cctv_id}: {note} (sent to {notification_count} users)")
+                logger.info(f"🟢 Step 3 DONE: {notification_count} notifications created")
+                logger.info(f"✅ SUCCESS: Notification flow completed for CCTV {cctv_id}")
                 
                 return {
                     "sent": True,
                     "history_id": history.id_history,
                     "user_count": notification_count
                 }
+                
             except Exception as e:
-                logger.error(f"❌ Failed to create notification: {str(e)}")
+                logger.error(f"❌ EXCEPTION in create_notification: {type(e).__name__}: {str(e)}", exc_info=True)
                 return {
                     "sent": False,
                     "error": str(e)
                 }
-        
-    def _should_send_notification(self, stream_key: str, new_status: bool) -> bool:
-        """Check if notification should be sent to avoid duplicates"""
-        tracker = self.notification_tracker.get(stream_key, {})
-        last_status = tracker.get("last_status")
-        
-        # Send notification if:
-        # 1. No previous status recorded (first time)
-        # 2. Status changed from previous state
-        if last_status is None or last_status != new_status:
-            return True
-        
-        logger.debug(f"Skipping duplicate notification for {stream_key} (status unchanged: {new_status})")
-        return False
-    
-    # def handle_webhook_unpublish(self, stream_key: str, metadata: Optional[Dict] = None):
-    #     """Handle stream disconnection event"""
-    #     logger.info(f"🔴 Stream '{stream_key}' UNPUBLISH event received")
-        
-    #     # Find CCTV by stream key
-    #     cctv = self.cctv_repo.get_by_stream_key(stream_key)
-    #     if not cctv:
-    #         logger.warning(f"⚠️ CCTV with stream_key '{stream_key}' not found in database")
-    #         return {
-    #             "success": False, 
-    #             "message": "CCTV not found",
-    #             "stream_key": stream_key
-    #         }
-        
-    #     # Update streaming status in database
-    #     self.cctv_repo.update_streaming_status(cctv.id_cctv, False)
-    #     logger.info(f"📝 Updated CCTV {cctv.id_cctv} status to offline")
-        
-    #     # Check if notification should be sent
-    #     if not self._should_send_notification(stream_key, False):
-    #         return {
-    #             "success": True,
-    #             "duplicate": True,
-    #             "message": "Notification already sent for this state"
-    #         }
-        
-    #     # Create notification
-    #     note = f"CCTV offline di titik '{cctv.titik_letak}'. Koneksi terputus."
-    #     result = self._create_notification(cctv.id_cctv, note)
-        
-    #     # Update tracker
-    #     self.notification_tracker[stream_key] = {
-    #         "is_notified": True,
-    #         "last_status": False,
-    #         "cctv_id": cctv.id_cctv
-    #     }
-        
-    #     return {
-    #         "success": True,
-    #         "status": "offline",
-    #         "cctv_id": cctv.id_cctv,
-    #         "cctv_name": cctv.titik_letak,
-    #         "notification": result
-    #     }
-    
-    # def handle_webhook_publish(self, stream_key: str, metadata: Optional[Dict] = None):
-    #     """Handle stream connection event"""
-    #     logger.info(f"🟢 Stream '{stream_key}' PUBLISH event received")
-        
-    #     # Find CCTV by stream key
-    #     cctv = self.cctv_repo.get_by_stream_key(stream_key)
-    #     if not cctv:
-    #         logger.warning(f"⚠️ CCTV with stream_key '{stream_key}' not found in database")
-    #         return {
-    #             "success": False, 
-    #             "message": "CCTV not found",
-    #             "stream_key": stream_key
-    #         }
-        
-    #     # Update streaming status in database
-    #     self.cctv_repo.update_streaming_status(cctv.id_cctv, True)
-    #     logger.info(f"📝 Updated CCTV {cctv.id_cctv} status to online")
-        
-    #     # Check if notification should be sent
-    #     if not self._should_send_notification(stream_key, True):
-    #         return {
-    #             "success": True,
-    #             "duplicate": True,
-    #             "message": "Notification already sent for this state"
-    #         }
-        
-    #     # Create notification
-    #     note = f"CCTV kembali online di titik '{cctv.titik_letak}'. Streaming aktif."
-    #     result = self._create_notification(cctv.id_cctv, note)
-        
-    #     # Update tracker
-    #     self.notification_tracker[stream_key] = {
-    #         "is_notified": True,
-    #         "last_status": True,
-    #         "cctv_id": cctv.id_cctv
-    #     }
-        
-    #     return {
-    #         "success": True,
-    #         "status": "online",
-    #         "cctv_id": cctv.id_cctv,
-    #         "cctv_name": cctv.titik_letak,
-    #         "notification": result
-    #     }
+        else:
+            logger.info(f"⏭️ Notifikasi diabaikan untuk CCTV {cctv_id}. Sudah ada event OFFLINE terakhir yang belum diservis.")
+            return {"sent": False, "reason": "Existing un-serviced offline event"}
+   
 
-    # def get_user_notifications(self, user_id: int) -> List[Dict]:
-    #     notifications = self.notification_repo.get_by_user(user_id)
+    def get_user_notifications(self, user_id: int) -> List[Dict]:
+        notifications = self.notification_repo.get_by_user(user_id)
         
-    #     notification = []
-    #     for notif in notifications:
-    #         history = notif.history
-    #         cctv = history.cctv_camera if history else None
+        response_data = []
+        for notif in notifications:
+            history = notif.history
+            cctv = history.cctv_camera if history and history.cctv_camera else None
             
-    #         notification.append({
-    #             "notification_id": notif.id_notification,
-    #             "history": {
-    #                 "id": history.id_history,
-    #                 "created_at": history.created_at.isoformat(),
-    #                 "note": history.note,
-    #                 "service": history.service,
-    #             } if history else None,
-    #             "cctv": {
-    #                 "id": cctv.id_cctv,
-    #                 "name": cctv.titik_letak,
-    #                 "ip_address": cctv.ip_address,
-    #                 "stream_key": cctv.stream_key,  
-    #                 "is_streaming": cctv.is_streaming
-    #             } if cctv else None
-    #         })
-        
-    #     return notification
+            # Inisialisasi dictionary datar
+            flat_data = {
+                # Dari Notification
+                "id_notification": notif.id_notification,
+                
+                # Dari History
+                "id_history": history.id_history if history else None,
+                "created_at": history.created_at if history else None,
+                "note": history.note if history else None,
+                
+                # Dari CCTV
+                "id_cctv": cctv.id_cctv if cctv else None,
+                "titi_letak": cctv.titik_letak if cctv else None,
+                "ip_address": cctv.ip_address if cctv else None,
+            }
+            
+            response_data.append(flat_data)
+            
+        return response_data
 
     def delete_notification(self, notification_id: int, user_id: int) -> bool:
         """Delete notifikasi (ketika user klik)"""
@@ -190,7 +110,7 @@ class NotificationService:
         if not notification:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User dengan id {user_id} tidak ditemukan"
+                detail=f"Notifikasi dengan id {notification_id} tidak ditemukan untuk user {user_id}."
             )
         return notification is not None
 
@@ -200,9 +120,3 @@ class NotificationService:
 
     def get_notification_count(self, user_id: int) -> int:
         return self.notification_repo.count_by_user(user_id)
-
-    def mark_history_serviced(self, history_id: int, note: str = None) -> bool:
-        notification = self.history_repo.mark_as_serviced(history_id, note)
-        if notification:
-            logger.info(f"History {history_id} marked as serviced")
-        return notification is not None

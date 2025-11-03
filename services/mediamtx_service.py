@@ -4,13 +4,14 @@ import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime
 from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
 from contextlib import asynccontextmanager
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from enum import Enum
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
+from core.config import settings
+from services.notification_service import NotificationService
 logger = logging.getLogger(__name__)
 
 class StreamStatus(str, Enum):
@@ -30,12 +31,11 @@ class StreamInfo:
     error_message: Optional[str] = None
 
 class MediaMTXService:
-    def __init__(self, cctv_repository: CctvRepository,):
-        self.api_base_url = "http://127.0.0.1:9997/v3"
-        self.stream_base_url = "http://127.0.0.1:8888"
+    def __init__(self, cctv_repository: CctvRepository, notification_service: NotificationService):
         self.rtsp_port = 8554
         self.http_port = 8888
-        self.cctv_repo = cctv_repository
+        self.cctv_repository = cctv_repository
+        self.notification_service = notification_service
         # Connection pooling untuk efisiensi
         self._client: Optional[httpx.AsyncClient] = None
         self._connection_timeout = 5.0
@@ -56,12 +56,19 @@ class MediaMTXService:
     async def close(self):
         if self._client and not self._client.is_closed:
             await self._client.aclose()
-
+        
+    # Di endpoint atau test file
+    async def test_notification(self):
+        result = await self.notification_service.create_notification(
+            cctv_id=1,
+            note="Test notification"
+        )
+        print(result)
     async def test_mediamtx_connection(self) -> bool:
         """Test koneksi ke MediaMTX API"""
         try:
             async with self._get_client() as client:
-                response = await client.get(f"{self.api_base_url}/config/global/get")
+                response = await client.get(f"{settings.MEDIAMTX_API}/config/global/get")
                 return response.status_code == 200
         except Exception as e:
             logger.warning(f"MediaMTX connection test failed: {e}")
@@ -88,7 +95,7 @@ class MediaMTXService:
             """
             try:
                 async with self._get_client() as client:
-                    response = await client.get(f"{self.api_base_url}/paths/list")
+                    response = await client.get(f"{settings.MEDIAMTX_API}/paths/list")
                     
                     if response.status_code != 200:
                         return {}
@@ -127,27 +134,24 @@ class MediaMTXService:
                 return {}        
     
     async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
-        """
-        Kombinasi cek MediaMTX + Ping IP, menggunakan httpx client pool.
-        """
-        
-        cctvs = self.cctv_repo.get_all()
+     
+        logger.info("🔄 Checking all stream status...")
+        cctvs = self.cctv_repository.get_all()
         status_map = {}
     
         async with self._get_client() as client:
-            response = await client.get(f"{self.api_base_url}/paths/list")
+            response = await client.get(f"{settings.MEDIAMTX_API}/paths/list")
             data = response.json() if response.status_code == 200 else {"items": []}
     
-        # Jalankan ping secara paralel
         ping_tasks = {cam.ip_address: asyncio.create_task(self._ping_ip(cam.ip_address)) for cam in cctvs}
         ping_results = {ip: await task for ip, task in ping_tasks.items()}
     
         for cam in cctvs:
             ip_reachable = ping_results.get(cam.ip_address, False)
-            # KODE PERBAIKAN: Menambahkan pengecekan tipe data
+       
             stream_data = next(
                 (item for item in data.get("items", [])
-                 # Cek dulu apakah item adalah dict DAN punya key 'name'
+                 
                  if isinstance(item, dict) and item.get("name") == cam.stream_key), 
                 None
             )
@@ -158,7 +162,21 @@ class MediaMTXService:
                 status = StreamStatus.CONNECTING
             else:
                 status = StreamStatus.OFFLINE
-    
+                if self.notification_service:
+                    note = f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) terdeteksi OFFLINE. Perangkat tidak terjangkau."
+                    
+                    try:
+                        result = await self.notification_service.create_notification(
+                            cctv_id=cam.id_cctv, 
+                            note=note
+                        )
+                        if result.get("sent"):
+                            logger.info(f"✅ Notification sent successfully for {cam.stream_key}")
+                        else:
+                            logger.error(f"❌ Notification failed for {cam.stream_key}: {result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"❌ Exception creating notification for {cam.stream_key}: {e}", exc_info=True)
+            
             status_map[cam.stream_key] = StreamInfo(
                 stream_key=cam.stream_key,
                 status=status,
@@ -166,16 +184,15 @@ class MediaMTXService:
                 source_ready=stream_data.get("ready", False) if stream_data else False,
                 last_updated=datetime.now()
             )
-    
         return status_map
-
+        
+   
     async def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
             """Register stream ke MediaMTX dengan retry logic"""
             path_config = {
                 "source": rtsp_source_url,
                 "sourceProtocol": "tcp",
                 "sourceOnDemand": True,  # Ubah ke True untuk save resources
-                # "readTimeout": "15s",
                 "runOnReady": "",
                 "runOnRead": ""
             }
@@ -184,7 +201,7 @@ class MediaMTXService:
                 try:
                     async with self._get_client() as client:
                         response = await client.post(
-                            f"{self.api_base_url}/config/paths/add/{stream_key}",
+                            f"{settings.MEDIAMTX_API}/config/paths/add/{stream_key}",
                             json=path_config,
                         )
                     
@@ -210,7 +227,7 @@ class MediaMTXService:
         try:
             async with self._get_client() as client:
                 response = await client.get(
-                    f"{self.api_base_url}/config/paths/get/{stream_key}",
+                    f"{settings.MEDIAMTX_API}/config/paths/get/{stream_key}",
                 )
             if response.status_code == 200:
                 logger.info(f"Stream {stream_key} already exists")
@@ -263,53 +280,11 @@ class MediaMTXService:
 class StreamService:
     """Service layer untuk stream operations"""
     
-    def __init__(self, cctv_repository: CctvRepository, location_repository: LocationRepository):
+    def __init__(self, cctv_repository: CctvRepository, location_repository: LocationRepository, notification_service: NotificationService):
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
-        self.mediamtx_service = MediaMTXService(cctv_repository=cctv_repository)
-        # self.event_manager = StreamEventManager()
-    
-    async def get_stream_urls(self, cctv_id: int) -> Dict:
-        """Get stream URLs untuk single CCTV"""
-        cctv = self.cctv_repository.get_by_id(cctv_id)
-        if not cctv:
-            raise HTTPException(status_code=404, detail="CCTV tidak ditemukan")
-        
-        mediamtx_online = await self.mediamtx_service.test_mediamtx_connection()
-        
-        if not mediamtx_online:
-            return {
-                "cctv_id": cctv.id_cctv,
-                "stream_key": cctv.stream_key,
-                "stream_urls": {},
-                "is_streaming": False,
-                "mediamtx_status": "offline",
-                "note": "MediaMTX server offline"
-            }
-        
-        rtsp_source_url = self.mediamtx_service.generate_rtsp_source_url(cctv.ip_address)
-        stream_registered = await self.mediamtx_service.ensure_stream(
-            cctv.stream_key,
-            rtsp_source_url
-        )
-        
-        status_map = await self.mediamtx_service.get_all_streams_status([cctv.stream_key])
-        stream_info = status_map.get(cctv.stream_key)
-        
-        is_active = stream_info.status == StreamStatus.ACTIVE if stream_info else False
-        
-        self.cctv_repository.update_streaming_status(cctv_id, is_active)
-        
-        return {
-            "cctv_id": cctv.id_cctv,
-            "stream_key": cctv.stream_key,
-            "stream_urls": self.mediamtx_service.generate_stream_urls(cctv.stream_key),
-            "is_streaming": is_active,
-            "mediamtx_status": "online",
-            "stream_status": stream_info.status.value if stream_info else "unknown",
-            "note": "Stream ready" if is_active else "Stream akan aktif ketika diakses"
-        }
-    
+        self.mediamtx_service = MediaMTXService(cctv_repository=cctv_repository, notification_service=notification_service)
+
     async def get_streams_by_location(self, location_id: int) -> Dict:
         """Get all streams untuk location dengan optimized queries"""
         existing_location = self.location_repository.get_by_id(location_id)
@@ -374,40 +349,3 @@ class StreamService:
         
         return location_streams
     
-    # async def stream_location_events(self, location_id: int):
-    #     """
-    #     SSE endpoint untuk realtime stream updates
-    #     Usage: GET /streams/location/{location_id}/events
-    #     """
-    #     queue = await self.event_manager.subscribe(str(location_id))
-        
-    #     async def event_generator():
-    #         try:
-    #             # Send initial connection message
-    #             yield f"data: {json.dumps({'event': 'connected', 'location_id': location_id})}\n\n"
-                
-    #             while True:
-    #                 # Wait for events with timeout
-    #                 try:
-    #                     event_data = await asyncio.wait_for(queue.get(), timeout=30.0)
-    #                     yield f"data: {json.dumps(event_data)}\n\n"
-    #                 except asyncio.TimeoutError:
-    #                     # Send heartbeat
-    #                     yield f"data: {json.dumps({'event': 'heartbeat', 'timestamp': datetime.now().isoformat()})}\n\n"
-                        
-    #         except asyncio.CancelledError:
-    #             logger.info(f"SSE connection cancelled for location {location_id}")
-    #         finally:
-    #             await self.event_manager.unsubscribe(str(location_id), queue)
-        
-    #     return StreamingResponse(
-    #         event_generator(),
-    #         media_type="text/event-stream",
-    #         headers={
-    #             "Cache-Control": "no-cache",
-    #             "Connection": "keep-alive",
-    #             "X-Accel-Buffering": "no"
-    #         }
-    #     )
-    
-   

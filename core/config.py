@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     DB_NAME: str
     DB_HOST: str
     DB_PORT: int
-
+    
+    MEDIAMTX_API: str
+    MEDIAMTX_STREAM: str
     # MEDIAMTX_API_URL: str
     # # MEDIAMTX_API_USERNAME: str
     # # MEDIAMTX_API_PASSWORD: str
