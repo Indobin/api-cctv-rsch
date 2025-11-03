@@ -2,7 +2,6 @@ from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from schemas.cctv_schemas import CctvCreate, CctvUpdate
 from fastapi import HTTPException, status
-from services.mediamtx_service import MediaMTXService
 import pandas as pd
 import logging
 # from typing import Dict
@@ -14,7 +13,6 @@ class CctvService:
     def __init__(self, cctv_repository: CctvRepository, location_repository: LocationRepository):
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
-        # self.mediamtx_service = MediaMTXService()
 
     def get_all_cctv(self, skip: int = 0, limit: int = 500 ):
         return self.cctv_repository.get_all(skip, limit)

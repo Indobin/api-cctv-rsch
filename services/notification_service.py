@@ -26,7 +26,7 @@ class NotificationService:
         self.notification_tracker: Dict[str, Dict] = {}
    
    
-    async def create_notification(self, cctv_id: int, note: str):
+    async def create_notification(self, cctv_id: int):
         logger.info(f"🔵 ENTER create_notification: cctv_id={cctv_id}")
         latest_history = self.history_repo.get_latest_by_cctv(cctv_id)
         if latest_history is None or latest_history.service is True:
@@ -39,8 +39,8 @@ class NotificationService:
                 logger.info(f"🔵 Step 2: Creating history...")
                 history = await asyncio.to_thread(
                     self.history_repo.create_history,
-                    cctv_id,
-                    note
+                    cctv_id
+                    # note
                 )
                 logger.info(f"🟢 Step 2 DONE: History ID={history.id_history}")
                 
@@ -96,7 +96,7 @@ class NotificationService:
                 
                 # Dari CCTV
                 "id_cctv": cctv.id_cctv if cctv else None,
-                "titi_letak": cctv.titik_letak if cctv else None,
+                "titik_letak": cctv.titik_letak if cctv else None,
                 "ip_address": cctv.ip_address if cctv else None,
             }
             

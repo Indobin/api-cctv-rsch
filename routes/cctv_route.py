@@ -90,7 +90,4 @@ def import_cctv(
         message="Cctv berhasil diimport",
         data=len(imported)   
     )
-    # return {
-    #     "status": "success",
-    #     "imported_count": len(imported),
-    # }
+   

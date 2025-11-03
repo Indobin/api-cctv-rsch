@@ -1,10 +1,6 @@
-from starlette import status
 from models.location_model import Location
 from.base import Session, History, CctvCamera
-from sqlalchemy import func, exists, and_, not_, or_, select
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 class HistoryRepository:
     def __init__(self, db: Session):
         self.db = db
@@ -29,10 +25,10 @@ class HistoryRepository:
             .all()
         )
 
-    def create_history(self, cctv_id: int, note: str, service: bool = False) -> History:
+    def create_history(self, cctv_id: int,  service: bool = False) -> History:
             db_history = History(
                 id_cctv=cctv_id,
-                note=note,
+                # note=note,
                 service=service,
                 status=False
             )
@@ -67,45 +63,7 @@ class HistoryRepository:
             History.id_cctv == cctv_id
         ).order_by(History.created_at.desc()).limit(limit).all()
 
-    def get_cctv_history(self, skip: int = 0, limit: int = 500):
-        subquery_has_history = (
-            select(History.id_history)
-            .where(History.id_cctv == CctvCamera.id_cctv)
-        )
-
-            # Subquery untuk cek apakah CCTV punya history dengan service = false
-        subquery_has_false_service = (
-            select(History.id_history)
-            .where(
-                and_(
-                    History.id_cctv == CctvCamera.id_cctv,
-                    History.service == False
-                )
-            )
-        )
-
-        return (
-            self.db.query(
-                CctvCamera.id_cctv,
-                CctvCamera.titik_letak,
-                CctvCamera.ip_address,
-                CctvCamera.stream_key,
-                CctvCamera.is_streaming,
-            )
-            .filter(
-                and_(
-                    CctvCamera.deleted_at.is_(None),
-                    or_(
-                        not_(exists(subquery_has_history)), 
-                        not_(exists(subquery_has_false_service)) 
-                    )
-                )
-            )
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-
+   
 
     def update(self, history_id: int, history: History):
         db_history = self.get_by_id(history_id)
@@ -115,6 +73,16 @@ class HistoryRepository:
             db_history.note = history.note
         if history.service:
             db_history.service = history.service
+        self.db.commit()
+        self.db.refresh(db_history)
+        return db_history
+        
+    def update_service_status(self, history_id: int, service: bool) -> History:
+        """Update service status untuk history tertentu"""
+        db_history = self.get_by_id(history_id)
+        if not db_history:
+            return None
+        db_history.service = service
         self.db.commit()
         self.db.refresh(db_history)
         return db_history

@@ -12,7 +12,7 @@ def get_stream_service(db: Session = Depends(get_db)):
     user_repo = UserRepository(db)
     notification_repo = NotificationRepository(db)
     notification_service = NotificationService(notification_repo, history_repo, cctv_repo, user_repo)
-    return StreamService(cctv_repo, location_repo, notification_service)
+    return StreamService(cctv_repo, history_repo, location_repo, notification_service)
 
 
 
