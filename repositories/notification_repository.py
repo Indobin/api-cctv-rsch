@@ -20,9 +20,10 @@ class NotificationRepository:
             Notification.id_user == user_id
         ).order_by(Notification.id_notification.desc()).limit(limit).all()
     
-    def delete(self, notification_id: int):
+    def delete(self, notification_id: int, user_id: int):
         notification = self.db.query(Notification).filter(
-            Notification.id_notification == notification_id
+            Notification.id_notification == notification_id,
+            Notification.id_user == user_id
         ).first()
         if notification:
             self.db.delete(notification)

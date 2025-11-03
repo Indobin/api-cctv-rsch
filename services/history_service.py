@@ -1,10 +1,6 @@
-from pandas.core.methods.describe import describe_categorical_1d
-from pydantic.types import SecretType
-from models.history_model import History
 from repositories.history_repository import HistoryRepository
 from repositories.cctv_repository import CctvRepository
 from repositories.user_repository import UserRepository
-from typing import List, Dict
 from fastapi import HTTPException, status
 import pandas as pd
 
