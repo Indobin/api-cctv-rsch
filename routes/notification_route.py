@@ -68,25 +68,4 @@ def delete_all_notifications(
         data={"deleted_count": deleted_count}
     )
 
-# @router.post("/notification/manual")
-# async def test_create_notification(
-#     cctv_id: int,
-#     note: str = "Test notification - Manual trigger",
-#     notification_service: NotificationService = Depends(get_notification_service)
-# ):
-#     """
-#     Test endpoint untuk create notification
-#     Example: POST /test/notification/manual?cctv_id=1&note=Test
-#     """
-#     logger.info(f"🧪 TEST: Manual notification test triggered for CCTV {cctv_id}")
-    
-#     result = await notification_service.create_notification(
-#         cctv_id=cctv_id,
-#         note=note
-#     )
-    
-#     return {
-#         "test": "manual_notification",
-#         "result": result,
-#         "timestamp": datetime.now().isoformat()
-#     }
+#

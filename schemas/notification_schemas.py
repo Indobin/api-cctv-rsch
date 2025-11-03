@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from.base import BaseModel, Optional
 from datetime import datetime
 
 class NotificationResponse(BaseModel):
@@ -6,8 +6,8 @@ class NotificationResponse(BaseModel):
     id_history: int
     id_cctv: int
     created_at: datetime
-    note: str
-    titi_letak: str
+    note: Optional[str]
+    titik_letak: str
     ip_address: str
 
     class Config:

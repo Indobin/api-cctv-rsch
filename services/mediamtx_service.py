@@ -8,8 +8,10 @@ from contextlib import asynccontextmanager
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from repositories import history_repository
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
+from repositories.history_repository import HistoryRepository
 from core.config import settings
 from services.notification_service import NotificationService
 logger = logging.getLogger(__name__)
@@ -31,10 +33,11 @@ class StreamInfo:
     error_message: Optional[str] = None
 
 class MediaMTXService:
-    def __init__(self, cctv_repository: CctvRepository, notification_service: NotificationService):
+    def __init__(self, cctv_repository: CctvRepository, history_repository: HistoryRepository, notification_service: NotificationService):
         self.rtsp_port = 8554
         self.http_port = 8888
         self.cctv_repository = cctv_repository
+        self.history_repository = history_repository
         self.notification_service = notification_service
         # Connection pooling untuk efisiensi
         self._client: Optional[httpx.AsyncClient] = None
@@ -61,7 +64,7 @@ class MediaMTXService:
     async def test_notification(self):
         result = await self.notification_service.create_notification(
             cctv_id=1,
-            note="Test notification"
+            # note="Test notification"
         )
         print(result)
     async def test_mediamtx_connection(self) -> bool:
@@ -75,7 +78,7 @@ class MediaMTXService:
             return False
     
     async def _ping_ip(self, ip: str) -> bool:
-        """Ping IP CCTV untuk memastikan perangkat hidup."""
+        """Ping IP CCTV untuk melihat status CCTV"""
         try:
             proc = await asyncio.create_subprocess_exec(
                 "ping", "-c", "1", "-W", "1", ip,
@@ -90,8 +93,7 @@ class MediaMTXService:
             
     async def get_all_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
             """
-            Get status semua streams dengan filtering optional
-            Returns StreamInfo objects untuk better type safety
+            Cek status cctv lewat mediamtx
             """
             try:
                 async with self._get_client() as client:
@@ -134,7 +136,7 @@ class MediaMTXService:
                 return {}        
     
     async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
-     
+        """Cek status cctv lewat mediamtx dan kirim notif"""
         logger.info("🔄 Checking all stream status...")
         cctvs = self.cctv_repository.get_all()
         status_map = {}
@@ -158,17 +160,34 @@ class MediaMTXService:
     
             if stream_data and stream_data.get("ready", False):
                 status = StreamStatus.ACTIVE
+                
+                latest_history = await asyncio.to_thread(
+                     self.history_repository.get_latest_by_cctv, 
+                     cam.id_cctv
+                 )
+                 
+                if latest_history and latest_history.service is False:
+                    # Update service jadi True karena CCTV sudah online kembali
+                    try:
+                        await asyncio.to_thread(
+                            self.history_repository.update_service_status,
+                            latest_history.id_history,
+                            True
+                        )
+                        logger.info(f"✅ CCTV {cam.titik_letak} (IP: {cam.ip_address}) kembali ONLINE. Service status updated.")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to update service status for {cam.stream_key}: {e}", exc_info=True)
             elif ip_reachable:
                 status = StreamStatus.CONNECTING
             else:
                 status = StreamStatus.OFFLINE
                 if self.notification_service:
-                    note = f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) terdeteksi OFFLINE. Perangkat tidak terjangkau."
+                    # note = f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) terdeteksi OFFLINE. Perangkat tidak terjangkau."
                     
                     try:
                         result = await self.notification_service.create_notification(
-                            cctv_id=cam.id_cctv, 
-                            note=note
+                            cctv_id=cam.id_cctv
+                            # note=note
                         )
                         if result.get("sent"):
                             logger.info(f"✅ Notification sent successfully for {cam.stream_key}")
@@ -223,7 +242,7 @@ class MediaMTXService:
             return False
             
     async def ensure_stream(self, stream_key: str, rtsp_source_url: str) -> bool:
-        """Pastikan stream ada dengan idempotent operation"""
+        """Memastikan stream ada di patch mediamtx"""
         try:
             async with self._get_client() as client:
                 response = await client.get(
@@ -242,11 +261,7 @@ class MediaMTXService:
             return False
     
     async def ensure_streams_batch(self, streams: List[tuple[str, str]]) -> Dict[str, bool]:
-        """
-        Batch operation untuk ensure multiple streams
-        streams: List of (stream_key, rtsp_source_url) tuples
-        Returns: Dict of stream_key -> success status
-        """
+        """Batch operation untuk ensure multiple streams"""
         tasks = [
             self.ensure_stream(stream_key, rtsp_url) 
             for stream_key, rtsp_url in streams
@@ -280,13 +295,13 @@ class MediaMTXService:
 class StreamService:
     """Service layer untuk stream operations"""
     
-    def __init__(self, cctv_repository: CctvRepository, location_repository: LocationRepository, notification_service: NotificationService):
+    def __init__(self, cctv_repository: CctvRepository,history_repository: HistoryRepository,  location_repository: LocationRepository, notification_service: NotificationService):
         self.cctv_repository = cctv_repository
         self.location_repository= location_repository
-        self.mediamtx_service = MediaMTXService(cctv_repository=cctv_repository, notification_service=notification_service)
+        self.mediamtx_service = MediaMTXService(cctv_repository=cctv_repository, history_repository=history_repository, notification_service=notification_service)
 
     async def get_streams_by_location(self, location_id: int) -> Dict:
-        """Get all streams untuk location dengan optimized queries"""
+        """Melakukan streams berdasarkan lokasi cctv"""
         existing_location = self.location_repository.get_by_id(location_id)
         if not existing_location:
             raise HTTPException(status_code=400, detail="Lokasi tidak ditemukan")
