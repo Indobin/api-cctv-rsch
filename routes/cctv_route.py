@@ -1,7 +1,7 @@
 from.base import APIRouter,File, Depends, UploadFile, Session, get_db, all_roles, success_response
 from.base import CctvRepository, LocationRepository
 from fastapi.responses import FileResponse
-from schemas.cctv_schemas import CctvCreate, CctvUpdate, CctvResponse
+from schemas.cctv_schemas import CctvCreate, CctvCreate1, CctvUpdate, CctvResponse
 from services.cctv_service import CctvService
 
 router = APIRouter(prefix="/cctv", tags=["cctv"])
@@ -27,18 +27,28 @@ def read_cctvs(
     )
 
 
-@router.post("/")   
-def create_cctv(
+@router.post("/ip")   
+def create_cctv_ip(
     cctv: CctvCreate,
     service: CctvService = Depends(get_cctv_service),
     user_role = Depends(all_roles)
 ):
-    created = service.create_cctv(cctv)
+    created = service.create_cctv_ip(cctv)
     return success_response(
         message="Cctv berhasil ditambahkan",
         data=CctvResponse.from_orm(created)
     )
-
+@router.post("/analog")
+def create_cctv_analog(
+    cctv: CctvCreate1,
+    service: CctvService = Depends(get_cctv_service),
+    user_role = Depends(all_roles)
+):
+    created = service.create_cctv_analog(cctv)
+    return success_response(
+        message="Cctv berhasil ditambahkan",
+        data=CctvResponse.from_orm(created)
+    )
 @router.put("/{cctv_id}")
 def update_cctv(
     cctv_id: int,
