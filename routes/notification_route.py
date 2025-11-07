@@ -32,7 +32,7 @@ def get_notification_count(
     service: NotificationService = Depends(get_notification_service),
     user_role = Depends(all_roles)
 ):
-    user_id = user_role.get("user_id")
+    user_id = user_role.id_user
     count = service.get_notification_count(user_id)
     
     return success_response(

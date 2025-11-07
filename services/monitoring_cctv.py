@@ -27,7 +27,7 @@ class BackgroundCCTVMonitor:
         
     async def start(self):
         self.is_running = True
-        logger.info("🔄 CCTV monitor started")
+        logger.info("CCTV monitor started")
         
         while self.is_running:
             db = None
@@ -45,16 +45,17 @@ class BackgroundCCTVMonitor:
                 )
                 stream_service = MediaMTXService(
                     cctv_repository=cctv_repo,
+                    history_repository=history_repo,
                     notification_service=notif_service
                 )
                 
-                logger.info("🔄 Checking CCTV streams...")
+                logger.info(" Mengecek service stream...")
                 await stream_service.get_all_streams_status()
 
                 db.commit()
                 
             except asyncio.CancelledError:
-                logger.info("Monitor task cancelled")
+                logger.info("Monitor task dibatalkan")
                 break
                 
             except Exception as e:

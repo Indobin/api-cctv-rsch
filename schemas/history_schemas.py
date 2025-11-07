@@ -2,7 +2,7 @@ from.base import BaseModel, Optional, datetime, Field
 
 class HistoryBase(BaseModel):
     id_cctv: int = Field(gt=0)
-    note: str = Field(None,min_length=5, max_length=255)
+    note: Optional[str] = Field(None,min_length=5, max_length=255)
 
 class HistoryCreate(HistoryBase):
     pass

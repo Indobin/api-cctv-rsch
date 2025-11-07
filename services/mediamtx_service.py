@@ -1,5 +1,6 @@
 import asyncio
-import httpx
+from annotated_types import Len
+from httpx import ConnectError, ReadTimeout, ConnectTimeout
 import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -8,7 +9,8 @@ from contextlib import asynccontextmanager
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from repositories import history_repository
+import httpx
+from starlette.types import StatefulLifespan
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from repositories.history_repository import HistoryRepository
@@ -72,16 +74,19 @@ class MediaMTXService:
         try:
             async with self._get_client() as client:
                 response = await client.get(f"{settings.MEDIAMTX_API}/config/global/get")
+                response.raise_for_status() 
                 return response.status_code == 200
-        except Exception as e:
-            logger.warning(f"MediaMTX connection test failed: {e}")
+        except (ConnectError, ConnectTimeout, ReadTimeout) as e:
+            logger.error(f"❌ Koneksi ke MediaMTX gagal (Network/Timeout): {e}")
             return False
-    
+        except Exception as e:
+            logger.error(f"❌ MediaMTX API returned an error (Status Code): {e}")
+            return False
     async def _ping_ip(self, ip: str) -> bool:
         """Ping IP CCTV untuk melihat status CCTV"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "ping", "-c", "1", "-W", "1", ip,
+                "ping", "-c", "1", "-W", "2", ip,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
@@ -137,10 +142,19 @@ class MediaMTXService:
     
     async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
         """Cek status cctv lewat mediamtx dan kirim notif"""
-        logger.info("🔄 Checking all stream status...")
+        logger.info(" Cek semua status stream cctv...")
+        check_mediamtx = await self.test_mediamtx_connection()
+        if not check_mediamtx:
+            logger.warning("MediaMTX API tidak dapat diakses. Pemeriksaan status streaming untuk semua CCTV dihentikan.")
+            return {}
+            
         cctvs = self.cctv_repository.get_all()
         status_map = {}
-    
+        status_counts = {
+                StreamStatus.ACTIVE: 0,
+                StreamStatus.CONNECTING: 0,
+                StreamStatus.OFFLINE: 0,
+            }
         async with self._get_client() as client:
             response = await client.get(f"{settings.MEDIAMTX_API}/paths/list")
             data = response.json() if response.status_code == 200 else {"items": []}
@@ -174,35 +188,52 @@ class MediaMTXService:
                             latest_history.id_history,
                             True
                         )
-                        logger.info(f"✅ CCTV {cam.titik_letak} (IP: {cam.ip_address}) kembali ONLINE. Service status updated.")
+                        await asyncio.to_thread(
+                            self.cctv_repository.update_streaming_status,
+                            cam.id_cctv,
+                            True
+                        )
+                        logger.info(f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) kembali ONLINE. Service status updated.")
                     except Exception as e:
                         logger.error(f"❌ Failed to update service status for {cam.stream_key}: {e}", exc_info=True)
             elif ip_reachable:
                 status = StreamStatus.CONNECTING
+                # if self.cctv_repository.update_streaming_status(cam.id_cctv, True):
+                #     logger.info(f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) kembali CONNECTING. Streaming status updated.")
+                # else:
+                #     logger.error(f"❌ Failed to update streaming status for {cam.stream_key}")
             else:
                 status = StreamStatus.OFFLINE
                 if self.notification_service:
                     # note = f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) terdeteksi OFFLINE. Perangkat tidak terjangkau."
-                    
+                    self.cctv_repository.update_streaming_status(cam.id_cctv, False)
                     try:
                         result = await self.notification_service.create_notification(
                             cctv_id=cam.id_cctv
                             # note=note
                         )
                         if result.get("sent"):
-                            logger.info(f"✅ Notification sent successfully for {cam.stream_key}")
+                            logger.info(f"Notifikasi berhasil dikirim dari ip cctv {cam.ip_address}")
                         else:
-                            logger.error(f"❌ Notification failed for {cam.stream_key}: {result.get('error')}")
+                            logger.error(f"❌ Notifikasi tidak jadi dikirim dari ip cctv {cam.ip_address}: {result.get('error')}")
                     except Exception as e:
-                        logger.error(f"❌ Exception creating notification for {cam.stream_key}: {e}", exc_info=True)
-            
+                        logger.error(f"❌ Exception creating notification for ip {cam.ip_address}: {e}", exc_info=True)
+                        
+            status_counts[status] += 1
             status_map[cam.stream_key] = StreamInfo(
                 stream_key=cam.stream_key,
                 status=status,
                 has_source=stream_data is not None,
+                # count=count(status),
                 source_ready=stream_data.get("ready", False) if stream_data else False,
                 last_updated=datetime.now()
             )
+        logger.info("========================================")
+        logger.info(f"Total CCTV: {len(cctvs)}")
+        logger.info(f"Status Active: {status_counts[StreamStatus.ACTIVE]}")
+        logger.info(f"Status Connecting: {status_counts[StreamStatus.CONNECTING]}")
+        logger.info(f"Status Offline: {status_counts[StreamStatus.OFFLINE]}")
+        logger.info("========================================")
         return status_map
         
    
@@ -225,14 +256,14 @@ class MediaMTXService:
                         )
                     
                     if response.status_code == 200:
-                        logger.info(f"Stream {stream_key} registered successfully")
+                        logger.info(f"Stream {stream_key} berhasil dibuat")
                         return True
                     elif response.status_code == 409:
                         # Stream already exists
-                        logger.info(f"Stream {stream_key} already exists")
+                        logger.info(f"Stream {stream_key} sudah ada")
                         return True
                     else:
-                        logger.warning(f"Failed to register stream {stream_key}: {response.text}")
+                        logger.warning(f" Gagal membuat stream {stream_key}: {response.text}")
                         
                 except Exception as e:
                     logger.warning(f"Attempt {attempt + 1} failed for {stream_key}: {e}")
@@ -249,7 +280,7 @@ class MediaMTXService:
                     f"{settings.MEDIAMTX_API}/config/paths/get/{stream_key}",
                 )
             if response.status_code == 200:
-                logger.info(f"Stream {stream_key} already exists")
+                logger.info(f"Stream {stream_key} sudah ada")
                 return True
             elif response.status_code == 404:
                 return await self.add_stream_to_mediamtx(stream_key, rtsp_source_url)
@@ -347,10 +378,7 @@ class StreamService:
         # Build response and update database
         for cam in cameras:
             stream_info = all_status.get(cam.stream_key)
-            is_active = stream_info.status == StreamStatus.ACTIVE if stream_info else False
-            
-            # Update database
-            self.cctv_repository.update_streaming_status(cam.id_cctv, is_active)
+            is_active = stream_info.status == StreamStatus.CONNECTING if stream_info else False
             
             location_streams["cameras"].append({
                 "cctv_id": cam.id_cctv,

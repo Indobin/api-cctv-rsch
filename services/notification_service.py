@@ -27,37 +27,34 @@ class NotificationService:
    
    
     async def create_notification(self, cctv_id: int):
-        logger.info(f"🔵 ENTER create_notification: cctv_id={cctv_id}")
+        logger.info(f" Membuat notifikasi untuk cctv_id={cctv_id}")
         latest_history = self.history_repo.get_latest_by_cctv(cctv_id)
         if latest_history is None or latest_history.service is True:
             try:
                 
-                logger.info(f"🔵 Step 1: Getting user IDs...")
+                logger.info(f" Step 1: Memuat semua id user...")
                 user_ids = await asyncio.to_thread(self.user_repo.get_all_id)
-                logger.info(f"🟢 Step 1 DONE: Found {len(user_ids)} users: {user_ids}")
+                logger.info(f" Step 1 DONE: Found {len(user_ids)} users: {user_ids}")
                 
-                logger.info(f"🔵 Step 2: Creating history...")
+                logger.info(f" Step 2: Membuat history...")
                 history = await asyncio.to_thread(
                     self.history_repo.create_history,
                     cctv_id
                     # note
                 )
-                logger.info(f"🟢 Step 2 DONE: History ID={history.id_history}")
                 
-                logger.info(f"🔵 Step 3: Creating notifications...")
+                logger.info(f" Step 3: Membuat notifikasi...")
                 notification_count = 0
                 for user_id in user_ids:
-                    logger.debug(f"   Creating notification for user {user_id}...")
                     await asyncio.to_thread(
                         self.notification_repo.create,
                         user_id, 
                         history.id_history
                     )
                     notification_count += 1
-                    logger.debug(f"   ✓ Notification {notification_count} created")
                 
-                logger.info(f"🟢 Step 3 DONE: {notification_count} notifications created")
-                logger.info(f"✅ SUCCESS: Notification flow completed for CCTV {cctv_id}")
+                logger.info(f" Step 3 DONE: {notification_count} notifikasi berhasil dibuat")
+                # logger.info(f" SUCCESS: Notification flow completed for CCTV {cctv_id}")
                 
                 return {
                     "sent": True,

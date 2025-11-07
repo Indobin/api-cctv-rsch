@@ -1,8 +1,9 @@
+from pydantic.types import StrictBool
 from.base import BaseModel, datetime, Optional, Field, field_validator
 from ipaddress import IPv4Address
 
 class CctvBase(BaseModel):
-    titik_letak: str = Field(min_length=3, max_length=200)
+    titik_letak: Optional[str] = Field(min_length=3, max_length=200)
     ip_address: str = Field(
         description="Alamat IPv4 yang valid.",
         min_length=7, # e.g., "0.0.0.0"
@@ -17,7 +18,22 @@ class CctvBase(BaseModel):
         except ValueError:
             raise ValueError('ip_address harus berupa format IPv4 yang valid.')
     id_location: int = Field(gt=0)
-
+class CctvCreate1(BaseModel):
+    titik_letak: str
+    ip_address: str = Field(
+        description="Alamat IPv4 yang valid.",
+        min_length=7, # e.g., "0.0.0.0"
+        max_length=15, # e.g., "255.255.255.255"
+    )
+    @field_validator('ip_address')
+    @classmethod
+    def validate_ip_format(cls, v):
+        try:
+            IPv4Address(v)
+            return v
+        except ValueError:
+            raise ValueError('ip_address harus berupa format IPv4 yang valid.')
+    id_location: int = Field(gt=0)
 class CctvCreate(CctvBase):
     pass
 

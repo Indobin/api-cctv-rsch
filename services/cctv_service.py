@@ -1,6 +1,7 @@
+from sqlalchemy import Null
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
-from schemas.cctv_schemas import CctvCreate, CctvUpdate
+from schemas.cctv_schemas import CctvCreate, CctvCreate1, CctvUpdate
 from fastapi import HTTPException, status
 import pandas as pd
 import logging
@@ -17,7 +18,7 @@ class CctvService:
     def get_all_cctv(self, skip: int = 0, limit: int = 500 ):
         return self.cctv_repository.get_all(skip, limit)
        
-    def create_cctv(self, cctv: CctvCreate):
+    def create_cctv_ip(self, cctv: CctvCreate):
         existing_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
         if existing_ip:
             raise HTTPException(
@@ -63,6 +64,48 @@ class CctvService:
                 detail=f"Error saat membuat CCTV: {str(e)}"
             )
         
+    def create_cctv_analog(self, cctv: CctvCreate1):
+        existing_ip = self.cctv_repository.get_by_ip(cctv.ip_address)
+        if existing_ip:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="IP Address sudah ada"
+            )
+        
+        existing_position = self.cctv_repository.get_by_position(cctv.titik_letak)
+        if existing_position:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Titik letak sudah ada"
+            )
+        
+        existing_location = self.location_repository.get_by_id(cctv.id_location)
+        if not existing_location:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Lokasi tidak ditemukan"
+            )
+        stream_key = f"loc_{cctv.id_location}_analog"
+        location_name = existing_location.nama_lokasi
+        titik_analog = f"Analog {location_name}"
+        cctv_data = {
+            "titik_letak": titik_analog,
+            "ip_address": cctv.ip_address,
+            "id_location": cctv.id_location,
+            "stream_key": None,
+            "is_streaming": False
+        }
+
+        try:
+            db_cctv = self.cctv_repository.create(cctv_data)
+            db_cctv.cctv_location_name = location_name
+            return db_cctv
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error saat membuat CCTV: {str(e)}"
+            )
+            
     def update_cctv(self, cctv_id: int, cctv: CctvUpdate):
         db_cctv = self.cctv_repository.get_by_id(cctv_id)
         if not db_cctv:
