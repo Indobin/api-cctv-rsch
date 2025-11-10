@@ -26,6 +26,7 @@ class UserRepository:
             )
             .join(Role, User.id_role == Role.id_role)
             .where(User.deleted_at == None)
+            .order_by(User.id_user.desc())
             .offset(skip)
             .limit(limit)
             .all()

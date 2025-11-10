@@ -22,6 +22,13 @@ class LocationRepository:
         self.db.refresh(db_location)
         return db_location
     
+    def create_by_analog(self, nama_lokasi: str):
+        db_location = Location(nama_lokasi=nama_lokasi)
+        self.db.add(db_location)
+        self.db.commit()
+        self.db.refresh(db_location)
+        return db_location
+    
     def update(self, location_id, location: Location):
         db_location = self.get_by_id(location_id)
         if not db_location:

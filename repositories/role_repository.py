@@ -5,7 +5,7 @@ class RoleRepository:
         self.db = db
 
     def get_all(self, skip: int=0, limit: int = 10):
-        return self.db.query(Role).offset(skip).limit(limit).all()
+        return self.db.query(Role).order_by(Role.id_role.desc()).offset(skip).limit(limit).all()
 
     def get_by_id(self, id_role: int):
         return self.db.query(Role).filter(Role.id_role == id_role).first

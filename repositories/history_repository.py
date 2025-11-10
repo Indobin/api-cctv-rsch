@@ -20,6 +20,7 @@ class HistoryRepository:
             )
             .join(CctvCamera, History.id_cctv == CctvCamera.id_cctv)
             .join(Location, CctvCamera.id_location == Location.id_location)
+            .order_by(History.id_history.desc())
             .offset(skip)
             .limit(limit)
             .all()

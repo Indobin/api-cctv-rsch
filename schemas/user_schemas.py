@@ -11,7 +11,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     nama: Optional[str] = Field(None,min_length=5, max_length=200)
     nip: Optional[int] = Field(None, gt=0 )
-    username: Optional[str] = Field(min_length=6, max_length=200)
+    username: Optional[str] = Field(None, min_length=6, max_length=200)
     password: Optional[str] = Field(None,min_length=6, max_length=255)
 
 class UserResponse(UserBase):

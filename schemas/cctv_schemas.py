@@ -19,7 +19,7 @@ class CctvBase(BaseModel):
             raise ValueError('ip_address harus berupa format IPv4 yang valid.')
     id_location: int = Field(gt=0)
 class CctvCreate1(BaseModel):
-    titik_letak: str
+    titik_letak: Optional[str] = Field(None,min_length=3, max_length=200)
     ip_address: str = Field(
         description="Alamat IPv4 yang valid.",
         min_length=7, # e.g., "0.0.0.0"
@@ -33,7 +33,7 @@ class CctvCreate1(BaseModel):
             return v
         except ValueError:
             raise ValueError('ip_address harus berupa format IPv4 yang valid.')
-    id_location: int = Field(gt=0)
+    nama_lokasi: str = Field(min_length=5, max_length=200)
 class CctvCreate(CctvBase):
     pass
 
