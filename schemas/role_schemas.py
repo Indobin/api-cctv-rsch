@@ -1,7 +1,7 @@
-from.base import BaseModel
+from.base import BaseModel, Field
 
 class RoleBase(BaseModel):
-    nama_role: str
+    nama_role: str = Field(min_length=5, max_length=200)
 
 class RoleCreate(RoleBase):
     pass

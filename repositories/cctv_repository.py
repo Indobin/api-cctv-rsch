@@ -23,6 +23,7 @@ class CctvRepository:
             )
             .join(Location, CctvCamera.id_location == Location.id_location)
             .where(CctvCamera.deleted_at == None)
+            .order_by(CctvCamera.id_cctv.desc())
             .offset(skip)
             .limit(limit)
             .all()

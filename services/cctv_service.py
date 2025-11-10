@@ -79,26 +79,26 @@ class CctvService:
                 detail="Titik letak sudah ada"
             )
         
-        existing_location = self.location_repository.get_by_id(cctv.id_location)
-        if not existing_location:
+        exiting_location = self.location_repository.get_by_name(cctv.nama_lokasi)
+        if exiting_location:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Lokasi tidak ditemukan"
+                detail="Lokasi sudah ada"
             )
-        stream_key = f"loc_{cctv.id_location}_analog"
-        location_name = existing_location.nama_lokasi
-        titik_analog = f"Analog {location_name}"
+        create_location = self.location_repository.create_by_analog(cctv.nama_lokasi)
+        # stream_key = f"loc_{cctv.id_location}_analog"
+        titik_analog = f"Analog {cctv.nama_lokasi}"
         cctv_data = {
             "titik_letak": titik_analog,
             "ip_address": cctv.ip_address,
-            "id_location": cctv.id_location,
+            "id_location": create_location.id_location,
             "stream_key": None,
             "is_streaming": False
         }
 
         try:
             db_cctv = self.cctv_repository.create(cctv_data)
-            db_cctv.cctv_location_name = location_name
+            db_cctv.cctv_location_name = cctv.nama_lokasi
             return db_cctv
         except Exception as e:
             raise HTTPException(
