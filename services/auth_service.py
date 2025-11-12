@@ -7,7 +7,7 @@ class AuthService:
         self.user_repository = UserRepository(db) 
 
     def login(self, username: str, password: str):
-        user = self.user_repository.get_by_usernameL(username)
+        user = self.user_repository.get_by_username(username)
         if not user:
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,

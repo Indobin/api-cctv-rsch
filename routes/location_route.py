@@ -50,7 +50,20 @@ def update_location(
         data=LocationResponse.from_orm(updated)
     )
 
-@router.delete("/", response_model=dict)
+@router.delete("/soft/{location_id}")
+def soft_delete_location(
+    location_id: int,
+    service: LocationService = Depends(get_location_service),
+    user_role = Depends(all_roles)
+): 
+    deleted = service.soft_delete_location(location_id)
+    return success_response(
+        message="Lokasi berhasil dihapus", 
+        data=LocationResponse.from_orm(deleted)
+    )
+
+    
+@router.delete("/hard/{location_id}", response_model=dict)
 def hard_delete_location(
     location_id: int,
     service: LocationService = Depends(get_location_service),

@@ -148,7 +148,7 @@ class MediaMTXService:
             logger.warning("MediaMTX API tidak dapat diakses. Pemeriksaan status streaming untuk semua CCTV dihentikan.")
             return {}
             
-        cctvs = self.cctv_repository.get_all()
+        cctvs = self.cctv_repository.get_all_stream()
         status_map = {}
         status_counts = {
                 StreamStatus.ACTIVE: 0,

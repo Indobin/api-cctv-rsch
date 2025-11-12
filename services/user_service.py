@@ -8,8 +8,8 @@ class UserService:
 
     def get_all_users(self, skip: int = 0, limit: int = 50 ):
         return self.user_repository.get_all(skip, limit)
-       
-    
+
+
     def create_user(self, user: UserCreate):
         existing_nip = self.user_repository.get_by_nip(user.nip)
         existing_username = self.user_repository.get_by_username(user.username)
@@ -24,7 +24,7 @@ class UserService:
                 detail="Username sudah ada"
             )
         return self.user_repository.create(user)
-    
+
     def update_user(self, user_id: int , user: UserUpdate):
         db_user = self.user_repository.get_by_id(user_id)
         if not db_user:
@@ -47,7 +47,7 @@ class UserService:
                     detail="Username sudah dipakai akun lain"
                 )
         return self.user_repository.update(user_id, user)
-        
+
     def hard_delete_user(self, user_id: int):
         user = self.user_repository.hard_delete(user_id)
         if not user:
@@ -65,7 +65,7 @@ class UserService:
                 detail=f"User dengan id {user_id} tidak ditemukan"
             )
         return user
-        
+
     def export_users(self, file_type: str = "csv"):
         data = self.user_repository.get_all_for_export()
         df = pd.DataFrame([dict(row._mapping) for row in data])
@@ -84,7 +84,7 @@ class UserService:
             df.to_excel(file_path, index=False)
 
         return file_path
-    
+
     @staticmethod
     def parse_import_user(uploaded_file):
         import pandas as pd
@@ -102,9 +102,9 @@ class UserService:
                 "password": row.get("Password"),
             })
         return rows
-    
+
     def import_bulk(self, rows: list[dict]):
-        
+
         imported_users = []
 
         for row in rows:
@@ -173,4 +173,3 @@ class UserService:
         results = self.user_repository.upsert_bulk(clean_users)
 
         return [UserResponse.from_orm(u) for u in results]
-
