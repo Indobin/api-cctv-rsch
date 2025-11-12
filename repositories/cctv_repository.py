@@ -1,5 +1,5 @@
 from.base import Session, CctvCamera, Location
-from sqlalchemy import func
+from sqlalchemy import Null, func
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -28,16 +28,31 @@ class CctvRepository:
             .limit(limit)
             .all()
     )
-
+    
+    def get_all_stream(self, skip: int = 0, limit: int = 50):
+        return(
+            self.db.query(
+                CctvCamera.id_cctv,
+                CctvCamera.titik_letak,
+                CctvCamera.ip_address,
+                CctvCamera.is_streaming,
+                CctvCamera.stream_key,
+            )
+            .where(CctvCamera.deleted_at == None, ~(CctvCamera.titik_letak.startswith("Analog")))
+            .order_by(CctvCamera.id_cctv.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+    )
     
     def get_by_position(self, titik_letak: str):
-        return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).first()
+        return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).where(CctvCamera.deleted_at == None).first()
 
     def get_by_positionL(self, titik_letak: str):
         return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).where(CctvCamera.deleted_at == None).first()
     
     def get_by_ip(self, ip_address: str):
-        return self.db.query(CctvCamera).filter(CctvCamera.ip_address == ip_address).first()
+        return self.db.query(CctvCamera).filter(CctvCamera.ip_address == ip_address).where(CctvCamera.deleted_at == None).first()
 
     def get_by_id(self, id_cctv: int):
         return self.db.query(CctvCamera).filter(CctvCamera.id_cctv == id_cctv).first()

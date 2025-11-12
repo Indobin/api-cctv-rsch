@@ -33,16 +33,13 @@ class UserRepository:
     )
 
     def get_by_username(self, username: str):
-        return self.db.query(User).filter(User.username == username).first()
-    
-    def get_by_usernameL(self, username: str):
         return self.db.query(User).filter(User.username == username).where(User.deleted_at == None).first()
 
     def get_by_nip(self, nip: str):
-        return self.db.query(User).filter(User.nip == nip).first()
+        return self.db.query(User).filter(User.nip == nip).where(User.deleted_at == None).first()
     
     def get_all_id(self) -> List[int]:
-        results = self.db.query(User.id_user).all()
+        results = self.db.query(User.id_user).where(User.deleted_at == None).all()
         return [row.id_user for row in results]
     
     def get_by_id(self, user_id: int):
@@ -74,7 +71,7 @@ class UserRepository:
         if user.username:
             db_user.username = user.username
         if user.password:
-            db_user.hashed_password = pwd_context.hash(user.password)
+            db_user.password = pwd_context.hash(user.password)
         
         self.db.commit()
         self.db.refresh(db_user)

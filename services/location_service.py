@@ -33,6 +33,15 @@ class LocationService:
                 )
         return self.location_repository.update(location_id, location)
     
+    def soft_delete_location(self, location_id: int):
+        location = self.location_repository.soft_delete(location_id)
+        if not location:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Lokasi dengan id {location_id} tidak ditemukan"
+            )
+        return location
+    
     def hard_delete_location(self, location_id:int):
         location = self.location_repository.hard_delete(location_id)
         if not location:

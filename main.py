@@ -11,12 +11,6 @@ from routes import (
     location_route, history_route
 )
 # from models import *
-from models.user_model import User
-from models.role_model import Role
-from models.notification_model import Notification
-from models.history_model import History
-from models.location_model import Location
-from models.cctv_model import CctvCamera
 from services.monitoring_cctv import BackgroundCCTVMonitor
 
 logging.basicConfig(level=logging.INFO, 

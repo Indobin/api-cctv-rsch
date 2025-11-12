@@ -19,7 +19,7 @@ def get_notifications(
     service: NotificationService = Depends(get_notification_service),
     user_role = Depends(all_roles)
 ):
-    user_id = user_role.id_user
+    user_id = user_role['id_user']
     notifications = service.get_user_notifications(user_id)
     response_data = [NotificationResponse.from_orm(loc) for loc in notifications]
     return success_response(
@@ -32,7 +32,7 @@ def get_notification_count(
     service: NotificationService = Depends(get_notification_service),
     user_role = Depends(all_roles)
 ):
-    user_id = user_role.id_user
+    user_id = user_role['id_user']
     count = service.get_notification_count(user_id)
     
     return success_response(
@@ -46,7 +46,7 @@ def delete_notification(
     service: NotificationService = Depends(get_notification_service),
     user_role = Depends(all_roles)
 ):
-    user_id = user_role.id_user
+    user_id = user_role['id_user']
     deleted = service.delete_notification(notification_id, user_id)
     
     return success_response(
@@ -60,7 +60,7 @@ def delete_all_notifications(
     user_role = Depends(all_roles)
 ):
   
-    user_id = user_role.id_user
+    user_id = user_role['id_user']
     deleted_count = service.delete_all_notifications(user_id)
     
     return success_response(
