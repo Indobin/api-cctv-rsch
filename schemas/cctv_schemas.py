@@ -3,7 +3,7 @@ from.base import BaseModel, datetime, Optional, Field, field_validator
 from ipaddress import IPv4Address
 
 class CctvBase(BaseModel):
-    titik_letak: Optional[str] = Field(min_length=3, max_length=200)
+    titik_letak: Optional[str] = Field(min_length=3, max_length=50)
     ip_address: str = Field(
         description="Alamat IPv4 yang valid.",
         min_length=7, # e.g., "0.0.0.0"
@@ -19,7 +19,7 @@ class CctvBase(BaseModel):
             raise ValueError('ip_address harus berupa format IPv4 yang valid.')
     id_location: int = Field(gt=0)
 class CctvCreate1(BaseModel):
-    titik_letak: Optional[str] = Field(None,min_length=3, max_length=200)
+    titik_letak: Optional[str] = Field(None,min_length=3, max_length=50)
     ip_address: str = Field(
         description="Alamat IPv4 yang valid.",
         min_length=7, # e.g., "0.0.0.0"

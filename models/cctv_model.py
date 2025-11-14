@@ -4,8 +4,8 @@ class CctvCamera(Base):
     __tablename__ = "cctv_camera"
 
     id_cctv = Column(Integer, primary_key=True)
-    titik_letak = Column(String)
-    ip_address = Column(String)
+    titik_letak = Column(String(50))
+    ip_address = Column(String(17))
     stream_key = Column(String, unique=True)
     is_streaming = Column(Boolean, default=False)   
     id_location = Column(Integer, ForeignKey("location.id_location", ondelete="CASCADE"))

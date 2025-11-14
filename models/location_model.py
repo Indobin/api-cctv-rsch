@@ -3,7 +3,7 @@ class Location(Base):
     __tablename__ = "location"
 
     id_location = Column(Integer, primary_key=True)
-    nama_lokasi = Column(String(200))
+    nama_lokasi = Column(String(50))
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
