@@ -1,5 +1,6 @@
 from models.location_model import Location
 from.base import Session, History, CctvCamera
+from datetime import datetime, date
 from sqlalchemy import func
 class HistoryRepository:
     def __init__(self, db: Session):
@@ -87,3 +88,22 @@ class HistoryRepository:
         self.db.commit()
         self.db.refresh(db_history)
         return db_history
+
+    def get_all_fox_export(self, start_date: date, end_date: date):
+        end_datetime = datetime.combine(end_date, datetime.max.time())
+        return (
+            self.db.query(
+                CctvCamera.titik_letak,
+                CctvCamera.ip_address,
+                Location.nama_lokasi,
+                History.note,
+                History.service,
+                History.status,
+                History.created_at
+            )
+            .join(CctvCamera, History.id_cctv == CctvCamera.id_cctv)
+            .join(Location, CctvCamera.id_location == Location.id_location)
+            .filter(History.created_at.between(start_date, end_datetime))
+            .order_by(History.created_at.desc())
+            .all()
+        )

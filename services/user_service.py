@@ -66,7 +66,7 @@ class UserService:
             )
         return user
 
-    def export_users(self, file_type: str = "csv"):
+    def export_users(self, file_type: str ):
         data = self.user_repository.get_all_for_export()
         df = pd.DataFrame([dict(row._mapping) for row in data])
 
@@ -74,7 +74,7 @@ class UserService:
             "nama": "Nama",
             "username": "Username",
             "nip": "Nip",
-            "password": "Password"
+            # "password": "Password"
         }, inplace=True)
         if file_type == "csv":
             file_path = "users_export.csv"
