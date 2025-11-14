@@ -103,7 +103,7 @@ class UserRepository:
                 User.nama,
                 User.username, 
                 User.nip,
-                User.username.label('password')
+                # User.username.label('password')
             )
             .join(Role, User.id_role == Role.id_role)
             .where(User.id_role == 2)

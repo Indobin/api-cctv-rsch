@@ -8,7 +8,7 @@ from database import engine, Base, SessionLocal
 from routes import (
     auth_route, cctv_route, mediamtx_route, 
     notification_route, role_route, user_route, 
-    location_route, history_route
+    location_route, history_route, db_route
 )
 # from models import *
 from services.monitoring_cctv import BackgroundCCTVMonitor
@@ -79,6 +79,7 @@ app.include_router(cctv_route.router)
 app.include_router(mediamtx_route.router)
 app.include_router(notification_route.router)
 app.include_router(history_route.router)
+app.include_router(db_route.router)
 
 @app.get("/")
 def read_root():

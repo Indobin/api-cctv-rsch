@@ -1,7 +1,9 @@
-from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import APIRouter, Depends, Session, Query, get_db, all_roles, success_response
 from.base import HistoryRepository, CctvRepository, UserRepository
 from schemas.history_schemas import HistoryResponse, HistoryCreate, HistoryUpdate
 from services.history_service import HistoryService
+from datetime import date, timedelta
+from fastapi.responses import FileResponse
 
 router = APIRouter(prefix="/history", tags=["history"])
 
@@ -49,3 +51,23 @@ def update_history(
             message="History berhasil diperbarui",
             data=HistoryResponse.from_orm(updated)
     )
+    
+@router.get("/export")
+def export_history(
+    file_type: str = "xlsx",
+    start_date: date = Query(
+            default=date.today() - timedelta(days=30),
+            description="Tanggal Mulai Filter (YYYY-MM-DD)"
+    ),
+    end_date: date = Query(
+        default=date.today(),
+        description="Tanggal Akhir Filter (YYYY-MM-DD)"
+    ),
+
+    service: HistoryService = Depends(get_history_service),
+    user_role = Depends(all_roles)
+):
+    file_path = service.export_history(start_date, end_date, file_type)
+    filename = file_path.split("/")[-1] 
+        
+    return FileResponse(file_path, filename=filename, media_type=f"riwayat/{file_type}")
