@@ -1,9 +1,9 @@
-from.base import APIRouter, Depends, Session, get_db, success_response, File, UploadFile, FileResponse
+from.base import APIRouter, Depends, Session, get_db, success_response, File, UploadFile
 from repositories.user_repository import UserRepository
 from schemas.user_schemas import UserResponse, UserCreate, UserUpdate
 from services.user_service import UserService
 from core.auth import superadmin_role
-
+from fastapi.responses import StreamingResponse
 router = APIRouter(prefix="/users", tags=["users"])
 
 def get_user_service(db: Session = Depends(get_db)):
@@ -74,12 +74,16 @@ def hard_delete_user(
     )
 @router.get("/export")
 def export_users(
-    file_type: str = "xlsx",
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ):
-    file_path = service.export_users(file_type)
-    return FileResponse(file_path, filename=f"users.{file_type}")
+    result = service.export_users()
+    
+    return StreamingResponse(
+        content=result["data"],
+        headers={"Content-Disposition": f"attachment; filename={result['filename']}"},
+        media_type=result["media_type"]
+    )
 
 @router.post("/import")
 def import_users(
@@ -88,7 +92,7 @@ def import_users(
     user_role = Depends(superadmin_role)
 ):
     rows = service.parse_import_user(file)
-    imported = service.import_bulk(rows)
+    imported = service.import_users(rows)
     return {
         "status": "success",
         "imported_count": len(imported),

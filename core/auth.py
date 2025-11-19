@@ -59,12 +59,10 @@ def get_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db))
         "id_user": user.id_user,
         "nama": user.nama,
         "id_role": user.id_role,
-        # Tambahkan semua field yang Anda butuhkan di dependency
     }
-    # -----------------------------------------------------------
         
     user_cache[user_id] = (
-        user_safe, # Simpan objek yang AMAN (Pydantic/dict)
+        user_safe, 
         datetime.now() + timedelta(minutes=CACHE_EXPIRE_MINUTES)
     )
     

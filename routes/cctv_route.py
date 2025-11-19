@@ -1,8 +1,9 @@
-from.base import APIRouter,File, Depends, UploadFile, Session, get_db, all_roles, success_response
+from.base import APIRouter,File, Depends, UploadFile, Session, get_db, all_roles, superadmin_role, success_response
 from.base import CctvRepository, LocationRepository
 from fastapi.responses import FileResponse
 from schemas.cctv_schemas import CctvCreate, CctvCreate1, CctvUpdate, CctvResponse
 from services.cctv_service import CctvService
+from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/cctv", tags=["cctv"])
 
@@ -76,25 +77,29 @@ def soft_delete_cctv(
 
 @router.get("/export")
 def export_cctv(
-    file_type: str = "xlsx",
     service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
-    file_path = service.export_cctv(file_type)
-    return FileResponse(file_path, filename=f"cctv.{file_type}")
+    result = service.export_cctvs()
+    
+    return StreamingResponse(
+        content=result["data"],
+        headers={"Content-Disposition": f"attachment; filename={result['filename']}"},
+        media_type=result["media_type"]
+    )
 
 @router.post("/import")
 def import_cctv(
     file: UploadFile = File(...),
     service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles),
+    user_role = Depends(superadmin_role),
 ):
     
     # parsing Excel
     rows = service.parse_import_cctv(file)
 
     # import ke DB
-    imported = service.import_bulk(rows)
+    imported = service.import_cctvs(rows)
 
     return success_response(
         message="Cctv berhasil diimport",

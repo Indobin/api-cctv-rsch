@@ -1,10 +1,10 @@
-from.base import Base, Column, Integer, String, BigInteger,  ForeignKey, DateTime, Index, relationship, func
+from.base import Base, Column, Integer, String, ForeignKey, DateTime, Index, relationship, func
 class User(Base):
     __tablename__ = "users"
     id_user = Column(Integer, primary_key=True, index=True)
     nama = Column(String(50), index=True)
-    nip = Column(String(18))
-    username = Column(String(50))
+    nik = Column(String(11))
+    username = Column(String(20))
     password = Column(String(255))
     id_role = Column(Integer, ForeignKey("role.id_role"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -25,8 +25,8 @@ class User(Base):
             ),
 
             Index(
-                'uq_nip_active', 
-                'nip', 
+                'uq_nik_active', 
+                'nik', 
                 unique=True, 
                 postgresql_where=Column('deleted_at') == None,
             ),

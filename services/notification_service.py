@@ -81,17 +81,13 @@ class NotificationService:
             history = notif.history
             cctv = history.cctv_camera if history and history.cctv_camera else None
             
-            # Inisialisasi dictionary datar
             flat_data = {
-                # Dari Notification
                 "id_notification": notif.id_notification,
                 
-                # Dari History
                 "id_history": history.id_history if history else None,
                 "created_at": history.created_at if history else None,
                 "note": history.note if history else None,
-                
-                # Dari CCTV
+
                 "id_cctv": cctv.id_cctv if cctv else None,
                 "titik_letak": cctv.titik_letak if cctv else None,
                 "ip_address": cctv.ip_address if cctv else None,
