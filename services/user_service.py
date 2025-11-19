@@ -1,7 +1,13 @@
+from models.user_model import User
 from repositories.user_repository import UserRepository
 from schemas.user_schemas import UserCreate, UserUpdate, UserResponse
-from fastapi import HTTPException, status, UploadFile
+from fastapi import HTTPException, status
+from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
+from core.security import hash_password  
+from datetime import datetime
 import pandas as pd
+
 class UserService:
     def __init__(self, user_repository: UserRepository):
         self.user_repository = user_repository
@@ -11,12 +17,12 @@ class UserService:
 
 
     def create_user(self, user: UserCreate):
-        existing_nip = self.user_repository.get_by_nip(user.nip)
+        existing_nik = self.user_repository.get_by_nik(user.nik)
         existing_username = self.user_repository.get_by_username(user.username)
-        if existing_nip:
+        if existing_nik:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Nip sudah ada"
+                detail="Nik sudah ada"
             )
         if existing_username:
             raise HTTPException(
@@ -32,9 +38,9 @@ class UserService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Id user tidak ditemukan"
             )
-        if user.nip:
-            existing_nip  = self.user_repository.get_by_nip(user.nip)
-            if existing_nip and existing_nip.id_user != user_id:
+        if user.nik:
+            existing_nik  = self.user_repository.get_by_nik(user.nik)
+            if existing_nik and existing_nik.id_user != user_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Nip sudah dipakai akun lain"
@@ -66,110 +72,103 @@ class UserService:
             )
         return user
 
-    def export_users(self, file_type: str ):
+    def export_users(self):
         data = self.user_repository.get_all_for_export()
         df = pd.DataFrame([dict(row._mapping) for row in data])
-
         df.rename(columns={
-            "nama": "Nama",
-            "username": "Username",
-            "nip": "Nip",
-            # "password": "Password"
-        }, inplace=True)
-        if file_type == "csv":
-            file_path = "users_export.csv"
-            df.to_csv(file_path, index=False)
-        else:
-            file_path = "users_export.xlsx"
-            df.to_excel(file_path, index=False)
+                "nama": "Nama",
+                "username": "Username",
+                "nik": "Nik",
+                "role": "Role"
+            }, inplace=True)
+            
+        unique_time = datetime.now().strftime("%Y%m%d%H%M%S") 
+        
+        output = BytesIO() 
+        
+        df.to_excel(output, index=False)
+        
+        output.seek(0)
 
-        return file_path
+        return {
+            "data": output, 
+            "filename": f"Users_export_{unique_time}.xlsx",
+            "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
 
     @staticmethod
     def parse_import_user(uploaded_file):
-        import pandas as pd
-        from io import BytesIO
-
         contents = uploaded_file.file.read()
-        df = pd.read_excel(BytesIO(contents))
-
-        rows = []
-        for _, row in df.iterrows():
-            rows.append({
-                "nama": row.get("Nama"),
-                "username": row.get("Username"),
-                "nip": row.get("Nip"),
-                "password": row.get("Password"),
-            })
+        df = pd.read_excel(BytesIO(contents), dtype={'Nik': str})
+        
+        rows = df.rename(columns={
+            "Nama": "nama",
+            "Username": "username", 
+            "Nik": "nik",
+            "Password": "password",
+            "Role": "role"
+        }).to_dict('records')
         return rows
 
-    def import_bulk(self, rows: list[dict]):
-
+    # service
+    def import_users(self, rows: list[dict]):
         imported_users = []
-
+        DEFAULT_PASSWORD = "Rsch123"
+        
+        usernames = [row["username"] for row in rows]
+        niks = [str(row["nik"]) for row in rows]
+        
+        existing_usernames = self.user_repository.get_existing_usernames(usernames)
+        existing_niks = self.user_repository.get_existing_niks(niks)
+        
+        users_to_create = []
+        
         for row in rows:
-            existing_username = self.user_repository.get_by_usernameL(row["username"])
-            if existing_username:
+            nik_str = str(row["nik"])
+            
+            if row["username"] in existing_usernames or nik_str in existing_niks:
                 continue
-            existing_nip = self.user_repository.get_by_nip(row["nip"])
-            if existing_nip:
-                continue
-
-            user_data = {
+            
+            password_value = row.get("password")
+            if not password_value or len(str(password_value)) < 6:
+                final_password = DEFAULT_PASSWORD
+            else:
+                final_password = str(password_value)
+                
+            role_str = row.get("role", "").lower()
+            if role_str == "superadmin":
+                id_role = 1
+            else:
+                id_role = 2
+    
+            users_to_create.append({
                 "nama": row["nama"],
                 "username": row["username"],
-                "nip": row["nip"],
-                "password": row["password"]
-                # "id_role": 2
-            }
-
-            user = UserCreate(**user_data)
-            user = self.user_repository.create(user)
-            imported_users.append(user)
-
-        return imported_users
-
-    def import_users(self, file: UploadFile):
-        if file.filename.endswith(".csv"):
-            df = pd.read_csv(file.file)
-        elif file.filename.endswith(".xlsx"):
-            df = pd.read_excel(file.file)
-        else:
-            raise HTTPException(status_code=400, detail="File harus CSV/XLSX")
-
-        required_columns = {"nama", "nip", "username"}
-        if not required_columns.issubset(set(df.columns)):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Kolom wajib {required_columns} tidak lengkap di file",
+                "nik": nik_str,
+                "password": final_password,
+                "id_role": id_role 
+            })
+        
+        if not users_to_create:
+            return []
+        
+        passwords = [u["password"] for u in users_to_create]
+        
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            hashed_passwords = list(executor.map(hash_password, passwords))
+        
+        db_users = []
+        for user_data, hashed_pwd in zip(users_to_create, hashed_passwords):
+            db_user = User(
+                nama=user_data["nama"],
+                nik=user_data["nik"],
+                username=user_data["username"],
+                password=hashed_pwd,
+                id_role=user_data["id_role"]
             )
+            db_users.append(db_user)
+        
+        return self.user_repository.bulk_create(db_users)
+        # return db_users
 
-        # hapus row kosong
-        df = df.dropna(subset=["nama", "nip", "username"])
-
-        # konversi ke dict
-        users = df.to_dict(orient="records")
-
-            # validasi per-row
-        clean_users = []
-        for row in users:
-            try:
-                nama = str(row["nama"]).strip()
-                nip = int(row["nip"]).strip()
-                username = str(row["username"]).strip()
-                password = str(row["password"]).strip() if "password" in row and row["password"] else None
-                if not (nama and nip and username):
-                    continue  # skip row kosong
-
-                clean_users.append({
-                    "nama": nama,
-                    "nip": nip,
-                    "username": username,
-                    "password": password,
-                })
-            except Exception:
-                continue  # skip row error
-
-        results = self.user_repository.upsert_bulk(clean_users)
-
-        return [UserResponse.from_orm(u) for u in results]
+    

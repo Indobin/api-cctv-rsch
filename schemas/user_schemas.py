@@ -1,17 +1,18 @@
 from.base import BaseModel, datetime, Optional, Field, StringConstraints
 from typing import Annotated
-NIP_Type = Annotated[
+NIK_Type = Annotated[
     str, 
     StringConstraints(
-        min_length=18, 
-        max_length=18, 
-        pattern=r'^\d{18}$'
+        min_length=9, 
+        max_length=11, 
+        pattern=r'^\d{4,5}\.\d{5,6}$'
     )
 ]
 class UserBase(BaseModel):
     nama: str = Field(min_length=5, max_length=50)
-    nip: NIP_Type = Field(description="NIP harus berupa 18 digit angka")
+    nik: NIK_Type = Field(description="NIK harus berupa 10-11 digit angka")
     username: str = Field(min_length=5, max_length=50)
+    id_role: int
 
 class UserCreate(UserBase):
     password: str = Field(min_length=6, max_length=255)
@@ -19,7 +20,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     nama: Optional[str] = Field(None,min_length=5, max_length=50)
     username: Optional[str] = Field(None,min_length=5, max_length=50)
-    nip: Optional[NIP_Type] = Field(None, description="NIP harus berupa 18 digit angka")
+    nik: Optional[NIK_Type] = Field(None, description="NIK harus berupa 10-11 digit angka")
     password: Optional[str] = Field(None,min_length=6, max_length=255)
 
 class UserResponse(UserBase):

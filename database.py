@@ -1,3 +1,4 @@
+from typing import Optional
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -7,7 +8,7 @@ import subprocess
 import os
 from datetime import datetime
 from fastapi import HTTPException, status
-
+from typing import Optional
 load_dotenv()
 # DATABASE_URL = os.getenv("DATABASE_URL")
 
@@ -20,7 +21,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-
 def get_db():
     db = SessionLocal()
     try:
@@ -28,14 +28,14 @@ def get_db():
     finally:
         db.close()
 class DatabaseService:
-    def export_sql(self, table_name: str | None = None):
+    def export_sql(self, table_name: Optional[str] = None, data_only: bool = False):
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         
         if table_name:
-            filename = f"{table_name}_dump_{timestamp}.sql"
+            filename = f"{table_name}_dump_{timestamp}.bak"
             table_arg = ["-t", table_name]
         else:
-            filename = f"full_db_dump_{timestamp}.sql"
+            filename = f"full_db_dump_{timestamp}.bak"
             table_arg = []
         
         file_path = os.path.join("/tmp", filename)
@@ -51,11 +51,17 @@ class DatabaseService:
             f"-U{settings.DB_USER}",
             f"-h{settings.DB_HOST}",
             f"-p{settings.DB_PORT}",
-            "-a",
-            *table_arg,
-            "-f",
-            file_path
+            "-F", "c",
+            "-v",
         ]
+        
+        if data_only:
+            command.append("-a")
+            
+        command.extend(table_arg)
+        
+        command.extend(["-f", file_path])
+        
         try:
             result = subprocess.run(
                 command, 

@@ -16,7 +16,7 @@ class UserRepository:
             self.db.query(
                 User.id_user,
                 User.nama,
-                User.nip,
+                User.nik,
                 User.username,
                 User.id_role,
                 Role.nama_role.label("user_role_name"),  
@@ -35,8 +35,8 @@ class UserRepository:
     def get_by_username(self, username: str):
         return self.db.query(User).filter(User.username == username).where(User.deleted_at == None).first()
 
-    def get_by_nip(self, nip: str):
-        return self.db.query(User).filter(User.nip == nip).where(User.deleted_at == None).first()
+    def get_by_nik(self, nik: str):
+        return self.db.query(User).filter(User.nik == nik).where(User.deleted_at == None).first()
     
     def get_all_id(self) -> List[int]:
         results = self.db.query(User.id_user).where(User.deleted_at == None).all()
@@ -49,10 +49,10 @@ class UserRepository:
         hashed_password = pwd_context.hash(user.password)
         db_user = User(
             nama = user.nama,
-            nip = user.nip,
+            nik = user.nik,
             username = user.username,
             password = hashed_password,
-            id_role = 2
+            id_role = user.id_role
         )
         self.db.add(db_user)
         self.db.commit()
@@ -66,8 +66,8 @@ class UserRepository:
         
         if user.nama:
             db_user.nama = user.nama
-        if user.nip:
-            db_user.nip = user.nip
+        if user.nik:
+            db_user.nik = user.nik
         if user.username:
             db_user.username = user.username
         if user.password:
@@ -102,11 +102,12 @@ class UserRepository:
             self.db.query(
                 User.nama,
                 User.username, 
-                User.nip,
+                User.nik,
+                Role.nama_role.label("role"),  
                 # User.username.label('password')
             )
             .join(Role, User.id_role == Role.id_role)
-            .where(User.id_role == 2)
+            .where(User.deleted_at.is_(None))
             .all()
     )
 
@@ -118,5 +119,24 @@ class UserRepository:
         self.db.refresh(db_user)
         return db_user
    
+    def get_existing_usernames(self, usernames: list[str]) -> set[str]:
+            result = self.db.query(User.username)\
+                .filter(User.username.in_(usernames))\
+                .where(User.deleted_at == None)\
+                .all()
+            return {u[0] for u in result}
+        
+    def get_existing_niks(self, niks: list[str]) -> set[str]:
+        result = self.db.query(User.nik)\
+            .filter(User.nik.in_(niks))\
+            .where(User.deleted_at == None)\
+            .all()
+        return {n[0] for n in result}
+    
+    def bulk_create(self, users: list[User]):
+       self.db.add_all(users)
+       self.db.commit()
+       # Otomatis punya ID, tidak perlu refresh
+       return users
 
         

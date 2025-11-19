@@ -1,8 +1,9 @@
-from sqlalchemy import Null
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from schemas.cctv_schemas import CctvCreate, CctvCreate1, CctvUpdate
 from fastapi import HTTPException, status
+from datetime import datetime
+from io import BytesIO
 import pandas as pd
 import logging
 # from typing import Dict
@@ -163,23 +164,28 @@ class CctvService:
             )
         return cctv
         
-    def export_cctv(self, file_type: str = "csv"):
+    def export_cctvs(self):
         data = self.cctv_repository.get_all_for_export()
         df = pd.DataFrame([dict(row._mapping) for row in data])
-
         df.rename(columns={
             'titik_letak': 'Titik Letak',
             'ip_address': 'Ip Address',
             'cctv_location_name': 'Server Monitoring'
         }, inplace=True)
-        if file_type == "csv":
-            file_path = "cctv_export.csv"
-            df.to_csv(file_path, index=False, sep=';')
-        else:
-            file_path = "cctv_export.xlsx" 
-            df.to_excel(file_path, index=False)
 
-        return file_path
+        unique_time = datetime.now().strftime("%Y%m%d%H%M%S") 
+
+        output = BytesIO() 
+        
+        df.to_excel(output, index=False)
+        
+        output.seek(0)
+
+        return {
+            "data": output, 
+            "filename": f"Cctvs_export_{unique_time}.xlsx",
+            "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
     
     @staticmethod
     def parse_import_cctv(uploaded_file):
@@ -198,7 +204,7 @@ class CctvService:
             })
         return rows
 
-    def import_bulk(self, rows: list[dict]):
+    def import_cctvs(self, rows: list[dict]):
       
         imported_cctvs = []
 

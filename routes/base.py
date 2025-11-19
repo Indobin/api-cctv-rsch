@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Query, Request
 from sqlalchemy.orm import Session
 from database import get_db
-from core.auth import all_roles
+from core.auth import all_roles, superadmin_role
 from core.response import success_response
 from fastapi.responses import FileResponse
 

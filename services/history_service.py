@@ -3,6 +3,7 @@ from repositories.cctv_repository import CctvRepository
 from repositories.user_repository import UserRepository
 from fastapi import HTTPException, status
 from datetime import date, datetime
+from io import BytesIO
 import pandas as pd
 
 from schemas.history_schemas import HistoryCreate, HistoryUpdate
@@ -45,9 +46,8 @@ class HistoryService:
         db_history.cctv_name = db_cctv.titik_letak
         return db_history
         
-    def export_history(self, start_date: date, end_date: date, file_type: str):
+    def export_history(self, start_date: date, end_date: date):
         data = self.history_repo.get_all_fox_export(start_date, end_date)
-        
         df = pd.DataFrame([dict(row._mapping) for row in data])
         if 'created_at' in df.columns:
                     df['created_at'] = df['created_at'].dt.tz_localize(None)
@@ -64,9 +64,17 @@ class HistoryService:
             "note": "Catatan",
             "created_at": "Tanggal dan Waktu",
         }, inplace=True)
+
         unique_time = datetime.now().strftime("%Y%m%d%H%M%S") 
             
-        file_path = f"Riwayat_{start_date}_dari_{end_date}_{unique_time}.xlsx"
-        df.to_excel(file_path, index=False)
+        output = BytesIO() 
+        
+        df.to_excel(output, index=False)
+        
+        output.seek(0)
 
-        return file_path
+        return {
+            "data": output, 
+            "filename": f"Laporan_kerusakan_dari_{start_date}_sampai_{end_date}.xlsx",
+            "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
