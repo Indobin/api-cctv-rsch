@@ -29,7 +29,7 @@ def create_user(
     user: UserCreate,
     db: Session = Depends(get_db),
     service: UserService = Depends(get_user_service),
-    # user_role = Depends(superadmin_role)
+    user_role = Depends(superadmin_role)
 ):
     new_user = service.create_user(user)
     return success_response(

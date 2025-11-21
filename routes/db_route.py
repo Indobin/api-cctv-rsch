@@ -9,7 +9,6 @@ router = APIRouter(prefix="/db", tags=["Database Management"])
 def export_sql_data(
     table_name: str = Query(None, description="Nama tabel yang ingin diekspor (kosongkan untuk semua data)"),
     service = DatabaseService(),
-    # Hanya Superadmin yang boleh melakukan dump DB
     user_role = Depends(superadmin_role) 
 ):
     try:
@@ -20,13 +19,9 @@ def export_sql_data(
             file_path, 
             filename=filename, 
             media_type="application/sql"
-            # Optional: Jika Anda ingin menghapus file setelah dikirim
-            # background=BackgroundTask(lambda: os.remove(file_path)) 
         )
         
     except HTTPException as e:
-        # Menangkap error dari service
         raise e
     except Exception as e:
-        # Menangkap error lain
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
