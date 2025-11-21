@@ -1,4 +1,4 @@
-from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import APIRouter, Depends, Session, get_db, superadmin_role success_response
 from.base import LocationRepository
 from schemas.location_schemas import LocationResponse, LocationCreate, LocationUpdate
 from services.location_service import LocationService
@@ -14,7 +14,7 @@ def read_location(
     skip: int = 0,
     limit: int = 50,
     service: LocationService = Depends(get_location_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     locations = service.get_all_location(skip, limit)
     response_data = [LocationResponse.from_orm(loc) for loc in locations]
@@ -29,7 +29,7 @@ def create_location(
     location: LocationCreate,
     db: Session = Depends(get_db),
     service: LocationService = Depends(get_location_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     created = service.create_location(location)
     return success_response(
@@ -42,7 +42,7 @@ def update_location(
     location_id: int,
     location: LocationUpdate,
     service: LocationService = Depends(get_location_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     updated = service.update_location(location_id, location)
     return success_response(
@@ -54,7 +54,7 @@ def update_location(
 def soft_delete_location(
     location_id: int,
     service: LocationService = Depends(get_location_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ): 
     deleted = service.soft_delete_location(location_id)
     return success_response(
@@ -67,7 +67,7 @@ def soft_delete_location(
 def hard_delete_location(
     location_id: int,
     service: LocationService = Depends(get_location_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     deleted = service.hard_delete_location(location_id)
     return success_response(

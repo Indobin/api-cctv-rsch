@@ -32,7 +32,7 @@ def read_cctvs(
 def create_cctv_ip(
     cctv: CctvCreate,
     service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     created = service.create_cctv_ip(cctv)
     return success_response(
@@ -43,7 +43,7 @@ def create_cctv_ip(
 def create_cctv_analog(
     cctv: CctvCreate1,
     service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     created = service.create_cctv_analog(cctv)
     return success_response(
@@ -55,7 +55,7 @@ def update_cctv(
     cctv_id: int,
     cctv: CctvUpdate,
     service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     updated = service.update_cctv(cctv_id, cctv)
     return success_response(
@@ -67,7 +67,7 @@ def update_cctv(
 def soft_delete_cctv(
     cctv_id: int,
     service: CctvService = Depends(get_cctv_service),
-    user_role = Depends(all_roles)
+    user_role = Depends(superadmin_role)
 ):
     deleted = service.soft_delete_cctv(cctv_id)
     return success_response(
