@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class BackgroundCCTVMonitor:
-    """Service cek cctv off atau on"""
     
     def __init__(
         self,
@@ -59,7 +58,7 @@ class BackgroundCCTVMonitor:
                 break
                 
             except Exception as e:
-                logger.error(f"❌ Error in CCTV monitor: {e}", exc_info=True)
+                logger.error(f"Error in CCTV monitor: {e}", exc_info=True)
                 if db:
                     db.rollback()
                 await asyncio.sleep(50)

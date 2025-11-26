@@ -95,7 +95,12 @@ def import_users(
 ):
     rows = service.parse_import_user(file)
     imported = service.import_users(rows)
-    return {
-        "status": "success",
-        "imported_count": len(imported),
-    }
+    total_imported = len(imported.get("imported", []))
+    total_updated = len(imported.get("updated", []))
+    return success_response(
+        message=f"Ditambahkan: {total_imported}, Diperbarui: {total_updated}",
+        data={
+            "total_imported": total_imported,
+            "total_updated": total_updated,
+        }
+    )

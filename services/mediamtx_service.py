@@ -28,6 +28,7 @@ class StreamStatus(str, Enum):
 @dataclass
 class StreamInfo:
     stream_key: str
+    ip_address: str
     status: StreamStatus
     has_source: bool
     source_ready: bool
@@ -222,6 +223,7 @@ class MediaMTXService:
             status_counts[status] += 1
             status_map[cam.stream_key] = StreamInfo(
                 stream_key=cam.stream_key,
+                ip_address=cam.ip_address,
                 status=status,
                 has_source=stream_data is not None,
                 # count=count(status),

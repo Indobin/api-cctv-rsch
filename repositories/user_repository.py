@@ -121,19 +121,14 @@ class UserRepository:
         self.db.refresh(db_user)
         return db_user
    
-    def get_existing_usernames(self, usernames: list[str]) -> set[str]:
-            result = self.db.query(User.username)\
-                .filter(User.username.in_(usernames))\
-                .where(User.deleted_at == None)\
-                .all()
-            return {u[0] for u in result}
-        
-    def get_existing_niks(self, niks: list[str]) -> set[str]:
-        result = self.db.query(User.nik)\
-            .filter(User.nik.in_(niks))\
+   # UserRepository
+    def get_existing_users_by_username_or_nik(self, usernames: list[str], niks: list[str]):
+        return self.db.query(User)\
+            .filter(
+                (User.username.in_(usernames)) | (User.nik.in_(niks))
+            )\
             .where(User.deleted_at == None)\
-            .all()
-        return {n[0] for n in result}
+        .all()
     
     def bulk_create(self, users: list[User]):
        self.db.add_all(users)

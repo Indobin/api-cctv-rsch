@@ -58,7 +58,8 @@ lifespan=lifespan
 )
 # app = FastAPI(title="CMS RSCH Management API", version="1.0.0")
 origins = [
-    "https://camera-management-system-rsch.vercel.app"
+    "https://camera-management-system-rsch.vercel.app",
+    "http://localhost:3000"
 ]
 
 #CORSMiddleware 

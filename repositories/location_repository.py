@@ -60,12 +60,15 @@ class LocationRepository:
         self.db.commit()
         return db_location
     
-    def get_existing_locations(self, nama_lokasi: list[str]) -> dict:
-        result = self.db.query(Location.nama_lokasi)\
-            .filter(Location.nama_lokasi.in_(nama_lokasi))\
-            .where(Location.deleted_at == None)\
+    def get_existing_locations(self, names: list[str]) -> dict:
+        result = (
+            self.db.query(Location)
+            .filter(Location.nama_lokasi.in_(names))
+            .where(Location.deleted_at == None)
             .all()
+        )
         return {loc.nama_lokasi: loc for loc in result}
+
     
     def bulk_create(self, location_names: list[str]):
         db_locations = [Location(nama_lokasi=name) for name in location_names]
