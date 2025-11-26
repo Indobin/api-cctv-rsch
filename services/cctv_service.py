@@ -37,7 +37,7 @@ class CctvService:
         existing_location = self.location_repository.get_by_id(cctv.id_location)
         if not existing_location:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="Lokasi tidak ditemukan"
             )
         
@@ -189,42 +189,74 @@ class CctvService:
     
     @staticmethod
     def parse_import_cctv(uploaded_file):
-        import pandas as pd
-        from io import BytesIO
-
-        contents = uploaded_file.file.read()
-        df = pd.read_excel(BytesIO(contents))
-
-        rows = []
-        for _, row in df.iterrows():
-            rows.append({
-                "titik_letak": row.get("Titik Letak"),
-                "ip_address": row.get("Ip Address"),
-                "server_monitoring": row.get("Server Monitoring"),
-            })
-        return rows
+        try:
+            contents = uploaded_file.file.read()
+            df = pd.read_excel(BytesIO(contents))
+            
+            rows = df.rename(columns={
+                "Titik Letak": "titik_letak",
+                "Ip Address": "ip_address",
+                "Server Monitoring": "server_monitoring"
+            }).to_dict('records')
+            
+            return rows
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error saat membaca file: {str(e)}"
+            )
+        finally:
+            uploaded_file.file.close()
+            
+     
 
     def import_cctvs(self, rows: list[dict]):
       
         imported_cctvs = []
+        updated_cctvs = []
 
+        server_names = list(set(row["server_monitoring"] for row in rows))
+        ip_addresses = [row["ip_address"] for row in rows]
+        positions = [row["titik_letak"] for row in rows]
+
+        existing_locations = self.location_repository.get_existing_locations(server_names)
+        existing_ip = self.cctv_repository.get_existing_ip(ip_addresses)
+        existing_position = self.cctv_repository.get_existing_position(positions)
+
+        new_location_names = [name for name in server_names if name not in existing_locations]
+        if new_location_names:
+            new_locs = self.location_repository.bulk_create(new_location_names)
+            for loc in new_locs:
+                existing_locations[loc.nama_lokasi] = loc
+        
         for row in rows:
-            lokasi = self.location_repository.get_by_name(row["server_monitoring"])
-            if not lokasi:
-                lokasi = self.location_repository.create(location=type("LocationCreate", (), {"nama_lokasi": row["server_monitoring"]}))
-            existing = self.cctv_repository.get_by_ip(row["ip_address"])
-            if existing:
-                continue  
-
-            stream_key = f"loc_{lokasi.id_location}_cam_{uuid.uuid4().hex[:8]}"
+            location = existing_locations[row["server_monitoring"]]
+            existing = row["ip_address"] in existing_ip or row["titik_letak"] in existing_position  
             cctv_data = {
                 "titik_letak": row["titik_letak"],
                 "ip_address": row["ip_address"],
-                "stream_key": stream_key,
-                "id_location": lokasi.id_location,
+                "id_location": location.id_location,
             }
 
-            cctv = self.cctv_repository.create(cctv_data)
-            imported_cctvs.append(cctv)
+            if existing:
 
-        return imported_cctvs
+                needs_update = {
+                    existing.titik_letak != row["titik_letak"],
+                    existing.ip_address != row["ip_address"],
+                    existing.id_location != location.id_location,
+                }
+
+                if needs_update:
+                    updated_cctvs.append((existing.id_cctv, cctv_data))
+            
+            else:   
+                cctv_data["stream_key"] = f"loc_{location.id_location}_cam_{uuid.uuid4().hex[:8]}"
+                create_cctvs.append(cctv_data)
+            
+        imported_cctvs = self.cctv_repository.bulk_create(create_cctvs) if create_cctvs else []
+        updated_cctvs = self.cctv_repository.bulk_update(updated_cctvs) if updated_cctvs else []
+
+        return {
+            "imported_cctvs": imported_cctvs,
+            "updated_cctvs": updated_cctvs,
+        }

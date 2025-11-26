@@ -1,4 +1,4 @@
-from.base import APIRouter, Depends, Session, get_db, superadmin_role success_response
+from.base import APIRouter, Depends, Session, get_db, superadmin_role, success_response
 from.base import LocationRepository
 from schemas.location_schemas import LocationResponse, LocationCreate, LocationUpdate
 from services.location_service import LocationService

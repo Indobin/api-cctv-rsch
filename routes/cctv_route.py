@@ -83,7 +83,7 @@ def export_cctv(
     result = service.export_cctvs()
     
     return StreamingResponse(
-        content=result["data"],
+       content=result["data"],
         headers={"Content-Disposition": f"attachment; filename={result['filename']}"},
         media_type=result["media_type"]
     )
@@ -94,15 +94,24 @@ def import_cctv(
     service: CctvService = Depends(get_cctv_service),
     user_role = Depends(superadmin_role),
 ):
-    
-    # parsing Excel
     rows = service.parse_import_cctv(file)
+    result = service.import_cctvs(rows)
 
-    # import ke DB
-    imported = service.import_cctvs(rows)
+    total_imported = len(result.get("imported", []))
+    total_updated = len(result.get("updated", []))
+    
+    message = (
+        f"Data CCTV berhasil diproses. "
+        f"Ditambahkan: {total_imported} data, "
+        f"Diperbarui: {total_updated} data."
+    )
 
     return success_response(
-        message="Cctv berhasil diimport",
-        data=len(imported)   
+        message=message,
+        data={
+            "total_processed": len(rows),
+            "total_imported": total_imported,
+            "total_updated": total_updated,
+        }
     )
-   
+        

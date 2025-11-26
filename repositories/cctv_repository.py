@@ -47,9 +47,6 @@ class CctvRepository:
     
     def get_by_position(self, titik_letak: str):
         return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).where(CctvCamera.deleted_at == None).first()
-
-    def get_by_positionL(self, titik_letak: str):
-        return self.db.query(CctvCamera).filter(CctvCamera.titik_letak == titik_letak).where(CctvCamera.deleted_at == None).first()
     
     def get_by_ip(self, ip_address: str):
         return self.db.query(CctvCamera).filter(CctvCamera.ip_address == ip_address).where(CctvCamera.deleted_at == None).first()
@@ -111,7 +108,35 @@ class CctvRepository:
             .all()
     )
 
+    def get_existing_ip(self, ip_address: list[str]):
+       result = self.db.query(CctvCamera.ip_address)\
+           .filter(CctvCamera.ip_address.in_(ip_address))\
+           .where(CctvCamera.deleted_at == None)\
+           .all()
+       return {i[0] for i in result}
     
+    def get_existing_position(self, titik_letak: list[str]):
+       result = self.db.query(CctvCamera.titik_letak)\
+           .filter(CctvCamera.titik_letak.in_(titik_letak))\
+           .where(CctvCamera.deleted_at == None)\
+           .all()
+       return {t[0] for t in result}
+    
+    def bulk_create(self, cctv_data_list: list[dict]):
+        db_cctvs = [CctvCamera(**data) for data in cctv_data_list]
+        self.db.add_all(db_cctvs)
+        self.db.commit()
+        return db_cctvs
 
+    def bulk_update(self, updates: list[tuple[int, dict]]):
+        updated_cctvs = []
+        for cctv_id, update_data in updates:
+            db_cctv = self.get_by_id(cctv_id)
+            if db_cctv:
+                for field, value in update_data.items():
+                    setattr(db_cctv, field, value)
+                updated_cctvs.append(db_cctv)
+        self.db.commit()
+        return updated_cctvs
 
         

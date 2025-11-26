@@ -1,5 +1,6 @@
 from models.user_model import User
 from repositories.user_repository import UserRepository
+from repositories.role_repository import RoleRepository
 from schemas.user_schemas import UserCreate, UserUpdate, UserResponse
 from fastapi import HTTPException, status
 from io import BytesIO
@@ -9,16 +10,17 @@ from datetime import datetime
 import pandas as pd
 
 class UserService:
-    def __init__(self, user_repository: UserRepository):
+    def __init__(self, user_repository: UserRepository, role_repository: RoleRepository):
         self.user_repository = user_repository
+        self.role_repository = role_repository
 
     def get_all_users(self, skip: int = 0, limit: int = 50 ):
         return self.user_repository.get_all(skip, limit)
 
-
     def create_user(self, user: UserCreate):
         existing_nik = self.user_repository.get_by_nik(user.nik)
         existing_username = self.user_repository.get_by_username(user.username)
+        existing_role = self.role_repository.get_by_id(user.id_role)
         if existing_nik:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -29,10 +31,16 @@ class UserService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username sudah ada"
             )
+        if not existing_role:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Role tidak ditemukan"
+            )
         return self.user_repository.create(user)
 
     def update_user(self, user_id: int , user: UserUpdate):
         db_user = self.user_repository.get_by_id(user_id)
+        existing_role = self.role_repository.get_by_id(user.id_role)
         if not db_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -51,6 +59,12 @@ class UserService:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Username sudah dipakai akun lain"
+                )
+        if user.id_role:
+            if not existing_role:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Role tidak ditemukan"
                 )
         return self.user_repository.update(user_id, user)
 
