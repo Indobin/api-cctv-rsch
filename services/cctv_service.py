@@ -211,27 +211,34 @@ class CctvService:
      
 
     def import_cctvs(self, rows: list[dict]):
-      
-        imported_cctvs = []
-        updated_cctvs = []
 
-        server_names = list(set(row["server_monitoring"] for row in rows))
-        ip_addresses = [row["ip_address"] for row in rows]
-        positions = [row["titik_letak"] for row in rows]
+        create_cctvs = []
+        update_cctvs = []
+
+        server_names = list({row["server_monitoring"] for row in rows})
+        ip_list = [row["ip_address"] for row in rows]
+        pos_list = [row["titik_letak"] for row in rows]
 
         existing_locations = self.location_repository.get_existing_locations(server_names)
-        existing_ip = self.cctv_repository.get_existing_ip(ip_addresses)
-        existing_position = self.cctv_repository.get_existing_position(positions)
 
-        new_location_names = [name for name in server_names if name not in existing_locations]
-        if new_location_names:
-            new_locs = self.location_repository.bulk_create(new_location_names)
+        existing_cctvs = self.cctv_repository.get_existing_cctvs(ip_list, pos_list)
+        by_ip = existing_cctvs["ip"]
+        by_pos = existing_cctvs["position"]
+
+        new_loc_names = [name for name in server_names if name not in existing_locations]
+
+        if new_loc_names:
+            new_locs = self.location_repository.bulk_create(new_loc_names)
             for loc in new_locs:
                 existing_locations[loc.nama_lokasi] = loc
-        
+
+   
         for row in rows:
+
             location = existing_locations[row["server_monitoring"]]
-            existing = row["ip_address"] in existing_ip or row["titik_letak"] in existing_position  
+
+            existing = by_ip.get(row["ip_address"]) or by_pos.get(row["titik_letak"])
+
             cctv_data = {
                 "titik_letak": row["titik_letak"],
                 "ip_address": row["ip_address"],
@@ -239,24 +246,39 @@ class CctvService:
             }
 
             if existing:
-
-                needs_update = {
-                    existing.titik_letak != row["titik_letak"],
-                    existing.ip_address != row["ip_address"],
-                    existing.id_location != location.id_location,
-                }
+               
+                needs_update = (
+                    existing.titik_letak != row["titik_letak"]
+                    or existing.ip_address != row["ip_address"]
+                    or existing.id_location != location.id_location
+                )
 
                 if needs_update:
-                    updated_cctvs.append((existing.id_cctv, cctv_data))
-            
-            else:   
-                cctv_data["stream_key"] = f"loc_{location.id_location}_cam_{uuid.uuid4().hex[:8]}"
+                    update_cctvs.append((existing.id_cctv, cctv_data))
+
+            else:
+                if row["titik_letak"] in by_pos or row["ip_address"] in by_ip:
+                    existing = by_pos.get(row["titik_letak"]) or by_ip.get(row["ip_address"])
+                    update_cctvs.append((existing.id_cctv, cctv_data))
+                    continue
+
+                cctv_data["stream_key"] = (
+                    f"loc_{location.id_location}_cam_{uuid.uuid4().hex[:8]}"
+                )
                 create_cctvs.append(cctv_data)
-            
-        imported_cctvs = self.cctv_repository.bulk_create(create_cctvs) if create_cctvs else []
-        updated_cctvs = self.cctv_repository.bulk_update(updated_cctvs) if updated_cctvs else []
+
+        imported = (
+            self.cctv_repository.bulk_create(create_cctvs)
+            if create_cctvs else []
+        )
+
+        updated = (
+            self.cctv_repository.bulk_update(update_cctvs)
+            if update_cctvs else []
+        )
 
         return {
-            "imported_cctvs": imported_cctvs,
-            "updated_cctvs": updated_cctvs,
+            "imported_cctvs": imported,
+            "updated_cctvs": updated,
         }
+

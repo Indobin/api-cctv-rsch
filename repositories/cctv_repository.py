@@ -1,5 +1,5 @@
 from.base import Session, CctvCamera, Location
-from sqlalchemy import Null, func
+from sqlalchemy import Null, func, or_
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -108,20 +108,21 @@ class CctvRepository:
             .all()
     )
 
-    def get_existing_ip(self, ip_address: list[str]):
-       result = self.db.query(CctvCamera.ip_address)\
-           .filter(CctvCamera.ip_address.in_(ip_address))\
-           .where(CctvCamera.deleted_at == None)\
-           .all()
-       return {i[0] for i in result}
-    
-    def get_existing_position(self, titik_letak: list[str]):
-       result = self.db.query(CctvCamera.titik_letak)\
-           .filter(CctvCamera.titik_letak.in_(titik_letak))\
-           .where(CctvCamera.deleted_at == None)\
-           .all()
-       return {t[0] for t in result}
-    
+    def get_existing_cctvs(self, ip_list, postion_list):
+        result = (
+            self.db.query(CctvCamera)
+            .filter(
+                or_(
+                    CctvCamera.ip_address.in_(ip_list),
+                    CctvCamera.titik_letak.in_(postion_list))
+            )
+            .where(CctvCamera.deleted_at == None)
+            .all()
+        )
+        return {
+            "ip": {c.ip_address: c for c in result},
+            "position": {c.titik_letak: c for c in result}
+        }
     def bulk_create(self, cctv_data_list: list[dict]):
         db_cctvs = [CctvCamera(**data) for data in cctv_data_list]
         self.db.add_all(db_cctvs)
@@ -129,14 +130,25 @@ class CctvRepository:
         return db_cctvs
 
     def bulk_update(self, updates: list[tuple[int, dict]]):
-        updated_cctvs = []
-        for cctv_id, update_data in updates:
-            db_cctv = self.get_by_id(cctv_id)
-            if db_cctv:
-                for field, value in update_data.items():
-                    setattr(db_cctv, field, value)
-                updated_cctvs.append(db_cctv)
+        ids = [u[0] for u in updates]
+
+        # query sekali
+        db_cctvs = (
+            self.db.query(CctvCamera)
+            .filter(CctvCamera.id_cctv.in_(ids))
+            .all()
+        )
+
+        db_map = {c.id_cctv: c for c in db_cctvs}
+
+        for cctv_id, data in updates:
+            cctv = db_map.get(cctv_id)
+            if cctv:
+                for field, value in data.items():
+                    setattr(cctv, field, value)
+
         self.db.commit()
-        return updated_cctvs
+        return list(db_map.values())
+
 
         

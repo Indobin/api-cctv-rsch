@@ -54,6 +54,7 @@ async def get_all_streams_status(
     streams_list = [
         {
             "stream_key": key,
+            "ip address": info.ip_address,
             "status": info.status.value,
             "has_source": info.has_source,
             "source_ready": info.source_ready,
