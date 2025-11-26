@@ -72,6 +72,8 @@ class UserRepository:
             db_user.username = user.username
         if user.password:
             db_user.password = pwd_context.hash(user.password)
+        if user.id_role:
+            db_user.id_role = user.id_role
         
         self.db.commit()
         self.db.refresh(db_user)
@@ -136,7 +138,6 @@ class UserRepository:
     def bulk_create(self, users: list[User]):
        self.db.add_all(users)
        self.db.commit()
-       # Otomatis punya ID, tidak perlu refresh
        return users
 
         

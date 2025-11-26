@@ -22,6 +22,7 @@ class UserUpdate(BaseModel):
     username: Optional[str] = Field(None,min_length=5, max_length=50)
     nik: Optional[NIK_Type] = Field(None, description="NIK harus berupa 10-11 digit angka")
     password: Optional[str] = Field(None,min_length=6, max_length=255)
+    id_role: Optional[int] = Field(None, gt=0)
 
 class UserResponse(UserBase):
     id_user: int

@@ -1,5 +1,6 @@
 from.base import APIRouter, Depends, Session, get_db, success_response, File, UploadFile
 from repositories.user_repository import UserRepository
+from repositories.role_repository import RoleRepository
 from schemas.user_schemas import UserResponse, UserCreate, UserUpdate
 from services.user_service import UserService
 from core.auth import superadmin_role
@@ -8,7 +9,8 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 def get_user_service(db: Session = Depends(get_db)):
     user_repo = UserRepository(db)
-    return UserService(user_repo)
+    role_repo = RoleRepository(db)
+    return UserService(user_repo, role_repo)
 
 @router.get("/", response_model=dict)
 def read_users(
@@ -27,7 +29,7 @@ def read_users(
 @router.post("/")
 def create_user(
     user: UserCreate,
-    db: Session = Depends(get_db),
+    # db: Session = Depends(get_db),
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ):
