@@ -114,214 +114,165 @@ class UserService:
     @staticmethod
     def parse_import_user(uploaded_file):
         contents = uploaded_file.file.read()
-        df = pd.read_excel(BytesIO(contents), dtype={'Nik': str})
-        
-        rows = df.rename(columns={
-            "Nama": "nama",
-            "Username": "username", 
-            "Nik": "nik",
-            "Password": "password",
-            "Role": "role"
-        }).to_dict('records')
+        df = pd.read_excel(BytesIO(contents), dtype={"Nik": str})
+        df.columns = df.columns.str.strip().str.lower()
 
+        df = df.rename(columns={
+            "nama": "nama",
+            "username": "username",
+            "nik": "nik",
+            "password": "password",
+            "role": "role"
+        })
+    
+        rows = df.to_dict("records")
+    
         validated_rows = []
         errors = []
-        
+    
         for idx, row in enumerate(rows, start=2):  
             try:
-                role_str = row.get("role", "").lower()
-                id_role = 1 if role_str == "superadmin" else 2
+                role_str = str(row.get("role", "")).strip().lower()
+                if not role_str:
+                    raise ValueError("Role kosong")
+    
+                if role_str == "superadmin":
+                    id_role = 1
+                elif role_str == "security":
+                    id_role = 2
+                else:
+                    raise ValueError(f"Role invalid: {role_str}")
+ 
                 user = UserCreate(
-                    nama=row["nama"],
-                    username=row["username"],
-                    nik=row["nik"],
-                    password=row.get("password", "Rsch123"),
+                    nama=row.get("nama"),
+                    username=row.get("username"),
+                    nik=row.get("nik"),
+                    password=row.get("password") or "Rsch123",  
                     id_role=id_role
                 )
+    
                 validated_rows.append(user.model_dump())
-            except ValidationError as e:
-                errors.append(f"Baris {idx}: {e.errors()[0]['msg']}")
-        
+    
+            except Exception as e:
+                errors.append(f"Baris {idx}: {e}")
+    
         if errors:
             raise HTTPException(
                 status_code=400,
-                detail={"message": "Data tidak valid", "errors": errors}
+                detail={
+                    "message": "Data tidak valid",
+                    "errors": errors
+                }
             )
-        
+    
         return validated_rows
 
+
     def import_users(self, rows: list[dict]):
-
-        DEFAULT_PASSWORD = "Rsch123"
-        
-        usernames = [row["username"] for row in rows]
-        niks = [str(row["nik"]) for row in rows]
-        
-        existing_users = self.user_repository.get_existing_users_by_username_or_nik(usernames, niks)
-        users_by_username = {u.username: u for u in existing_users}
-        users_by_nik = {u.nik: u for u in existing_users}
    
-        users_to_create = []
-        users_to_update = []
-        passwords_to_hash = []
-        
-        for row in rows:
-            nik_str = str(row["nik"])
-            username = row["username"]
-            
-            password_value = row.get("password")
-            if not password_value or len(str(password_value)) < 6:
-                final_password = DEFAULT_PASSWORD
-            else:
-                final_password = str(password_value)
-            
-            role_str = row.get("role", "").lower()
-            id_role = 1 if role_str == "superadmin" else 2
+       DEFAULT_PASSWORD = "Rsch123"
+   
+       usernames = [row["username"] for row in rows]
+       niks = [str(row["nik"]) for row in rows]
 
-            user_by_username = users_by_username.get(username)
-            user_by_nik = users_by_nik.get(nik_str)
-            
+       existing_users = self.user_repository.get_existing_users_by_username_or_nik(usernames, niks)
+       users_by_username = {u.username: u for u in existing_users}
+       users_by_nik = {u.nik: u for u in existing_users}
+   
+       users_to_create = []
+       users_to_update = []
+       passwords_to_hash = []
+   
+       for row in rows:
+           nik_str = str(row["nik"])
+           username = row["username"]
+           id_role = row["id_role"]
+           raw_password = row.get("password")
+           if raw_password and len(str(raw_password)) >= 6:
+               final_password = str(raw_password)
+           else:
+               final_password = DEFAULT_PASSWORD
 
-            if user_by_username and user_by_nik and user_by_username.id_user == user_by_nik.id_user:
-               
-                users_to_update.append({
-                    "user": user_by_username,
-                    "data": {
-                        "nama": row["nama"],
-                        "password": final_password,
-                        "id_role": id_role
-                    }
-                })
-                passwords_to_hash.append(final_password)
-                
-            elif user_by_username:
-               
-                users_to_update.append({
-                    "user": user_by_username,
-                    "data": {
-                        "nik": nik_str,
-                        "nama": row["nama"],
-                        "password": final_password,
-                        "id_role": id_role
-                    }
-                })
-                passwords_to_hash.append(final_password)
-                
-            elif user_by_nik:
-                
-                users_to_update.append({
-                    "user": user_by_nik,
-                    "data": {
-                        "username": username,
-                        "nama": row["nama"],
-                        "password": final_password,
-                        "id_role": id_role
-                    }
-                })
-                passwords_to_hash.append(final_password)
-                
-            else:
-              
-                users_to_create.append({
-                    "nama": row["nama"],
-                    "username": username,
-                    "nik": nik_str,
-                    "password": final_password,
-                    "id_role": id_role
-                })
-                passwords_to_hash.append(final_password)
-        
-        if not passwords_to_hash:
-            return {"imported": [], "updated": []}
-        
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            hashed_passwords = list(executor.map(hash_password, passwords_to_hash))
-        
-        hash_idx = 0
-        
-        for update_item in users_to_update:
-            update_item["data"]["password"] = hashed_passwords[hash_idx]
-            hash_idx += 1
-        
-        for user_data in users_to_create:
-            user_data["password"] = hashed_passwords[hash_idx]
-            hash_idx += 1
-    
-        updated_users = []
-        for update_item in users_to_update:
-            user = update_item["user"]
-            for field, value in update_item["data"].items():
-                setattr(user, field, value)
-            updated_users.append(user)
-        
-        db_users = [User(**user_data) for user_data in users_to_create]
-        self.user_repository.db.add_all(db_users)
-        
-        self.user_repository.db.commit()
-        
-        return {
-            "imported": db_users,
-            "updated": updated_users
-        }
+           user_by_username = users_by_username.get(username)
+           user_by_nik = users_by_nik.get(nik_str)
+   
+           if user_by_username and user_by_nik and user_by_username.id_user == user_by_nik.id_user:
+               users_to_update.append({
+                   "user": user_by_username,
+                   "data": {
+                       "nama": row["nama"],
+                       "id_role": id_role,
+                       "password": final_password
+                   }
+               })
+               passwords_to_hash.append(final_password)
 
-    # def import_users(self, rows: list[dict]):
-    #     imported_users = []
-    #     DEFAULT_PASSWORD = "Rsch123"
-        
-    #     usernames = [row["username"] for row in rows]
-    #     niks = [str(row["nik"]) for row in rows]
-        
-    #     existing_usernames = self.user_repository.get_existing_usernames(usernames)
-    #     existing_niks = self.user_repository.get_existing_niks(niks)
-        
-    #     users_to_create = []
-        
-    #     for row in rows:
-    #         nik_str = str(row["nik"])
-            
-    #         if row["username"] in existing_usernames or nik_str in existing_niks:
-    #             continue
-            
-    #         password_value = row.get("password")
-    #         if not password_value or len(str(password_value)) < 6:
-    #             final_password = DEFAULT_PASSWORD
-    #         else:
-    #             final_password = str(password_value)
-                
-    #         role_str = row.get("role", "").lower()
-    #         if role_str == "superadmin":
-    #             id_role = 1
-    #         else:
-    #             id_role = 2
-    
-    #         users_to_create.append({
-    #             "nama": row["nama"],
-    #             "username": row["username"],
-    #             "nik": nik_str,
-    #             "password": final_password,
-    #             "id_role": id_role 
-    #         })
-        
-    #     if not users_to_create:
-    #         return []
-        
-    #     passwords = [u["password"] for u in users_to_create]
-        
-    #     with ThreadPoolExecutor(max_workers=4) as executor:
-    #         hashed_passwords = list(executor.map(hash_password, passwords))
-        
-    #     db_users = []
-    #     for user_data, hashed_pwd in zip(users_to_create, hashed_passwords):
-    #         db_user = User(
-    #             nama=user_data["nama"],
-    #             nik=user_data["nik"],
-    #             username=user_data["username"],
-    #             password=hashed_pwd,
-    #             id_role=user_data["id_role"]
-    #         )
-    #         db_users.append(db_user)
-        
-    #     return self.user_repository.bulk_create(db_users)
-    #     # return db_users
+           elif user_by_username:
+               users_to_update.append({
+                   "user": user_by_username,
+                   "data": {
+                       "nik": nik_str,
+                       "nama": row["nama"],
+                       "id_role": id_role,
+                       "password": final_password
+                   }
+               })
+               passwords_to_hash.append(final_password)
+
+           elif user_by_nik:
+               users_to_update.append({
+                   "user": user_by_nik,
+                   "data": {
+                       "username": username,
+                       "nama": row["nama"],
+                       "id_role": id_role,
+                       "password": final_password
+                   }
+               })
+               passwords_to_hash.append(final_password)
+
+           else:
+               users_to_create.append({
+                   "nama": row["nama"],
+                   "username": username,
+                   "nik": nik_str,
+                   "id_role": id_role,
+                   "password": final_password
+               })
+               passwords_to_hash.append(final_password)
+
+       if not passwords_to_hash:
+           return {"imported": [], "updated": []}
+  
+       with ThreadPoolExecutor(max_workers=4) as executor:
+           hashed_passwords = list(executor.map(hash_password, passwords_to_hash))
+   
+       hash_idx = 0
+   
+       for update_item in users_to_update:
+           update_item["data"]["password"] = hashed_passwords[hash_idx]
+           hash_idx += 1
+   
+       for user_data in users_to_create:
+           user_data["password"] = hashed_passwords[hash_idx]
+           hash_idx += 1
+   
+       updated_users = []
+       for update_item in users_to_update:
+           user = update_item["user"]
+           for field, value in update_item["data"].items():
+               setattr(user, field, value)
+           updated_users.append(user)
+
+       db_users = [User(**user_data) for user_data in users_to_create]
+       self.user_repository.db.add_all(db_users)
+   
+       self.user_repository.db.commit()
+   
+       return {
+           "imported": db_users,
+           "updated": updated_users
+       }
+
 
     

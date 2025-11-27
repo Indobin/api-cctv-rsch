@@ -1,7 +1,8 @@
-from.base import APIRouter, Depends, Session, get_db, all_roles, success_response
+from.base import APIRouter, Depends, Session,  get_db, all_roles, success_response
 from.base import CctvRepository, LocationRepository, HistoryRepository, UserRepository, NotificationRepository
 from services.mediamtx_service import StreamService
 from services.notification_service import NotificationService
+from schemas.cctv_schemas import CctvIdsPayload
 router = APIRouter(prefix="/streams", tags=["streams"])
 
 
@@ -43,6 +44,19 @@ async def get_mediamtx_status(
         }
     )
 
+@router.post("/batch")
+async def get_cctv_streams_batch(
+    payload : CctvIdsPayload,
+    service: StreamService = Depends(get_stream_service),
+    user_role = Depends(all_roles)
+):
+    cctv_ids = payload.cctv_ids
+    
+    location_streams = await service.get_streams_by_cctv_ids(cctv_ids)
+    return success_response(
+        message=f"Streams untuk {len(cctv_ids)} CCTV berhasil ditampilkan",
+        data=location_streams
+    )
 
 @router.get("/mediamtx/all-streams")
 async def get_all_streams_status(

@@ -149,6 +149,8 @@ class CctvRepository:
 
         self.db.commit()
         return list(db_map.values())
-
+        
+    def get_by_ids(self, ids: list[int]):
+        return self.db.query(CctvCamera).filter(CctvCamera.id_cctv.in_(ids)).all()
 
         

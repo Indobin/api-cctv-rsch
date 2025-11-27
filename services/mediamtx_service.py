@@ -10,7 +10,6 @@ import logging
 from dataclasses import dataclass
 from enum import Enum
 import httpx
-from starlette.types import StatefulLifespan
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from repositories.history_repository import HistoryRepository
@@ -28,11 +27,11 @@ class StreamStatus(str, Enum):
 @dataclass
 class StreamInfo:
     stream_key: str
-    ip_address: str
     status: StreamStatus
     has_source: bool
     source_ready: bool
     last_updated: datetime
+    ip_address: Optional[str] = None
     error_message: Optional[str] = None
 
 class MediaMTXService:
@@ -130,6 +129,7 @@ class MediaMTXService:
                         
                         status_map[stream_key] = StreamInfo(
                             stream_key=stream_key,
+                            # ip_address=cam.ip_address,
                             status=status,
                             has_source=has_source,
                             source_ready=source_ready,
@@ -390,4 +390,68 @@ class StreamService:
             })
         
         return location_streams
+    
+    async def get_streams_by_cctv_ids(self, cctv_ids: List[int]) -> Dict:
+        """Melakukan streams berdasarkan daftar ID CCTV (maks 16)."""
+ 
+        if not cctv_ids:
+            raise HTTPException(status_code=400, detail="Daftar ID CCTV tidak boleh kosong")
+        if len(cctv_ids) > 16:
+            raise HTTPException(status_code=400, detail="Maksimum 16 ID CCTV yang diizinkan")
+            
+        cameras = self.cctv_repository.get_by_ids(cctv_ids)
+        
+        if not cameras:
+            raise HTTPException(status_code=404, detail="Tidak ada CCTV yang ditemukan untuk ID yang diberikan.")
+        
+        streams_result = {
+            "total_requested": len(cctv_ids),
+            "total_found": len(cameras),
+            "mediamtx_status": "offline", # Default
+            "cameras": []
+        }
+        
+        mediamtx_online = await self.mediamtx_service.test_mediamtx_connection()
+        streams_result["mediamtx_status"] = "online" if mediamtx_online else "offline"
+     
+        if not mediamtx_online:
+            for cam in cameras:
+                streams_result["cameras"].append({
+                    "cctv_id": cam.id_cctv,
+                    "titik_letak": cam.titik_letak,
+                    "ip_address": cam.ip_address,
+                    "stream_key": cam.stream_key,
+                    "is_streaming": False,
+                    "stream_urls": {},
+                    "location_name": cam.nama_lokasi if hasattr(cam, 'nama_lokasi') else 'N/A' 
+                })
+            return streams_result
+
+        stream_tuples = [
+            (cam.stream_key, self.mediamtx_service.generate_rtsp_source_url(cam.ip_address))
+            for cam in cameras
+        ]
+        await self.mediamtx_service.ensure_streams_batch(stream_tuples)
+        
+        await asyncio.sleep(1)
+    
+        stream_keys = [cam.stream_key for cam in cameras]
+        all_status = await self.mediamtx_service.get_all_status(stream_keys)
+ 
+        for cam in cameras:
+            stream_info = all_status.get(cam.stream_key)
+            is_active = stream_info.status == StreamStatus.CONNECTING if stream_info else False
+            
+            streams_result["cameras"].append({
+                "cctv_id": cam.id_cctv,
+                "titik_letak": cam.titik_letak,
+                "ip_address": cam.ip_address,
+                "stream_key": cam.stream_key,
+                "is_streaming": is_active,
+                "stream_urls": self.mediamtx_service.generate_stream_urls(cam.stream_key),
+                "stream_status": stream_info.status.value if stream_info else "unknown",
+                "location_name": cam.nama_lokasi if hasattr(cam, 'nama_lokasi') else 'N/A'
+            })
+            
+        return streams_result
     

@@ -51,12 +51,12 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutdown complete")
     
-app = FastAPI(
-title="CMS RSCH Management API",
- version="1.0.0",   
-lifespan=lifespan
-)
-# app = FastAPI(title="CMS RSCH Management API", version="1.0.0")
+# app = FastAPI(
+# title="CMS RSCH Management API",
+#  version="1.0.0",   
+# lifespan=lifespan
+# )
+app = FastAPI(title="CMS RSCH Management API", version="1.0.0")
 origins = [
     "https://camera-management-system-rsch.vercel.app",
     "http://localhost:3000"
