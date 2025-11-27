@@ -12,23 +12,23 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def create_roles(db):
-    default_roles = ["superadmin", "security"]
+    default_roles = ["Superadmin", "Security"]
 
     for role_name in default_roles:
         existing = db.query(Role).filter(Role.nama_role == role_name).first()
         if not existing:
             new_role = Role(nama_role=role_name)
             db.add(new_role)
-            print(f"✔ Role ditambahkan: {role_name}")
+            print(f"Role ditambahkan: {role_name}")
         else:
-            print(f"⚠ Role sudah ada: {role_name}")
+            print(f"Role sudah ada: {role_name}")
 
     db.commit()
 
 
 def create_default_user(db):
     # cek role superadmin
-    role = db.query(Role).filter(Role.nama_role == "superadmin").first()
+    role = db.query(Role).filter(Role.nama_role == "Superadmin").first()
     if not role:
         print("Role superadmin belum ada. Jalankan create_roles() dulu.")
         return

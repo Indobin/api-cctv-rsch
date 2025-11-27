@@ -17,6 +17,11 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(min_length=6, max_length=255)
 
+class UserCheck(BaseModel):
+    nama: str = Field(min_length=5, max_length=50)
+    nik: NIK_Type = Field(description="NIK harus berupa 10-11 digit angka")
+    username: str = Field(min_length=5, max_length=50)
+    password: str = Field(min_length=6, max_length=255)
 class UserUpdate(BaseModel):
     nama: Optional[str] = Field(None,min_length=5, max_length=50)
     username: Optional[str] = Field(None,min_length=5, max_length=50)

@@ -1,5 +1,7 @@
+from typing import List
 from pydantic.types import StrictBool
 from.base import BaseModel, datetime, Optional, Field, field_validator
+from typing import List
 from ipaddress import IPv4Address
 
 class CctvBase(BaseModel):
@@ -79,4 +81,6 @@ class StreamUrlsResponse(BaseModel):
     class Config:
         from_attributes = True
 
-
+class CctvIdsPayload(BaseModel):
+    # Menggunakan anotasi tipe yang benar
+    cctv_ids: List[int] = Field(..., max_length=16, description="Daftar ID CCTV, maks 16 ID")

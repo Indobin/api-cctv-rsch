@@ -6,6 +6,7 @@ from datetime import datetime
 from io import BytesIO
 import pandas as pd
 import logging
+from pydantic import ValidationError
 # from typing import Dict
 import uuid
 logger = logging.getLogger(__name__)
@@ -189,33 +190,44 @@ class CctvService:
     
     @staticmethod
     def parse_import_cctv(uploaded_file):
-        try:
-            contents = uploaded_file.file.read()
-            df = pd.read_excel(BytesIO(contents))
-            
-            rows = df.rename(columns={
-                "Titik Letak": "titik_letak",
-                "Ip Address": "ip_address",
-                "Server Monitoring": "server_monitoring"
-            }).to_dict('records')
-            
-            return rows
-        except Exception as e:
+        contents = uploaded_file.file.read()
+        df = pd.read_excel(BytesIO(contents))
+        
+        rows = df.rename(columns={
+            "Titik Letak": "titik_letak",
+            "Ip Address": "ip_address",
+            "Server Monitoring": "server_monitoring"
+        }).to_dict('records')
+        
+        validated_rows = []
+        errors = []
+        
+        for idx, row in enumerate(rows, start=2):  
+            try:
+                cctv = CctvCreate1(
+                    titik_letak=row["titik_letak"],
+                    ip_address=row["ip_address"],
+                    nama_lokasi=row["server_monitoring"]
+                )
+                validated_rows.append(cctv.model_dump())
+            except Exception as e:
+                errors.append(f"Baris {idx}: {e.errors()[0]['msg']}")
+        
+        if errors:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Error saat membaca file: {str(e)}"
+                status_code=400,
+                detail={"message": "Data tidak valid", "errors": errors}
             )
-        finally:
-            uploaded_file.file.close()
             
-     
+        return validated_rows
 
+        
     def import_cctvs(self, rows: list[dict]):
 
         create_cctvs = []
         update_cctvs = []
 
-        server_names = list({row["server_monitoring"] for row in rows})
+        server_names = list({row["nama_lokasi"] for row in rows})
         ip_list = [row["ip_address"] for row in rows]
         pos_list = [row["titik_letak"] for row in rows]
 
@@ -235,7 +247,7 @@ class CctvService:
    
         for row in rows:
 
-            location = existing_locations[row["server_monitoring"]]
+            location = existing_locations[row["nama_lokasi"]]
 
             existing = by_ip.get(row["ip_address"]) or by_pos.get(row["titik_letak"])
 
