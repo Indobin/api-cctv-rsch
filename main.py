@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import asyncio
-
+from core.config import settings
 from database import engine, Base, SessionLocal
 from routes import (
     auth_route, cctv_route, mediamtx_route, 
@@ -59,7 +59,7 @@ lifespan=lifespan
 origins = [
     "https://camera-management-system-rsch.vercel.app",
     "http://localhost:3000",
-    "http://192.168.10.2"
+    f"{settings.IP_PC}"
 ]
 
 #CORSMiddleware 

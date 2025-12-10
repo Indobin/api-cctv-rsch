@@ -10,4 +10,5 @@ class Settings(BaseSettings):
     MEDIAMTX_STREAM: str
     SECRET_KEY: str
     HOST_IP_FOR_CLIENT: str
+    IP_PC: str
 settings = Settings()

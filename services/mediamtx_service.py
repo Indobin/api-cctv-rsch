@@ -45,13 +45,6 @@ class MediaMTXService:
         self._client: Optional[httpx.AsyncClient] = None
         self._connection_timeout = 5.0
         self._max_retries = 2
-        # Cache untuk mencegah false offline detection
-        self._offline_detection_cache: Dict[str, int] = {}  # {ip: consecutive_fail_count}
-        self._offline_threshold = 2  # Baru dianggap offline setelah 2x pengecekan gagal berturut-turut
-        # Gateway/Internet connectivity check
-        self._gateway_check_hosts = ["8.8.8.8", "1.1.1.1"]  # Google DNS & Cloudflare DNS
-        self._last_server_connectivity_check: Optional[datetime] = None
-        self._server_connectivity_status: bool = True
         
     @asynccontextmanager
     async def _get_client(self):
@@ -69,6 +62,32 @@ class MediaMTXService:
     async def close(self):
         if self._client and not self._client.is_closed:
             await self._client.aclose()
+    
+    async def check_server_internet_connection(self) -> bool:
+        test_hosts = ["8.8.8.8", "1.1.1.1"]  # Google DNS & Cloudflare DNS
+        
+        for host in test_hosts:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "ping", "-c", "1", "-W", "3", host,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                await asyncio.wait_for(proc.communicate(), timeout=5.0)
+                
+                if proc.returncode == 0:
+                    logger.info(f"Server memiliki koneksi internet (ping ke {host} berhasil)")
+                    return True
+                    
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout saat ping ke {host}")
+                continue
+            except Exception as e:
+                logger.warning(f"Error saat ping ke {host}: {e}")
+                continue
+        
+        logger.error("Server TIDAK memiliki koneksi internet! Skip pengecekan CCTV.")
+        return False
         
     async def test_notification(self):
         result = await self.notification_service.create_notification(cctv_id=1)
@@ -87,48 +106,31 @@ class MediaMTXService:
             logger.error(f"MediaMTX API error: {e}")
             return False
             
-    async def _ping_ip(self, ip: str, retries: int = 2) -> tuple[bool, str]:
+    async def _ping_ip(self, ip: str, ping_count: int = 3) -> tuple[bool, str]:
         """
-        Ping IP dengan retry mechanism untuk mengurangi false negative
+        Ping IP sebanyak ping_count paket sekaligus dalam 1 command
         """
-        for attempt in range(retries):
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "ping", "-c", "1", "-W", "5", ip,  # Timeout dinaikkan dari 2 ke 5 detik
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                stdout, stderr = await proc.communicate()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ping", "-c", str(ping_count), "-W", "5", ip,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            
+            if proc.returncode == 0:
+                return True, "reachable"
+            
+            output = stderr.decode() + stdout.decode()
+            if "Network is unreachable" in output or "network unreachable" in output.lower():
+                return None, "network_unreachable"
+            
+            # Host down
+            return False, "host_down"
                 
-                if proc.returncode == 0:
-                    # Reset counter jika ping berhasil
-                    if ip in self._offline_detection_cache:
-                        del self._offline_detection_cache[ip]
-                    return True, "reachable"
-                
-                output = stderr.decode() + stdout.decode()
-                if "Network is unreachable" in output or "network unreachable" in output.lower():
-                    logger.debug(f"Network unreachable for {ip} (attempt {attempt + 1}/{retries})")
-                    if attempt < retries - 1:
-                        await asyncio.sleep(1)  # Wait sebelum retry
-                        continue
-                    return None, "network_unreachable"
-                
-                # Jika host down, coba lagi
-                if attempt < retries - 1:
-                    logger.debug(f"Ping failed for {ip}, retrying... (attempt {attempt + 1}/{retries})")
-                    await asyncio.sleep(1)
-                    continue
-                    
-            except Exception as e:
-                logger.warning(f"Ping error for {ip} (attempt {attempt + 1}/{retries}): {e}")
-                if attempt < retries - 1:
-                    await asyncio.sleep(1)
-                    continue
-                return None, "error"
-        
-        # Semua retry gagal
-        return False, "host_down"
+        except Exception as e:
+            logger.warning(f"Ping error for {ip}: {e}")
+            return None, "error"
             
     async def get_all_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
         try:
@@ -162,7 +164,7 @@ class MediaMTXService:
                         status=status,
                         has_source=has_source,
                         source_ready=source_ready,
-                        last_updated=datetime.now(timezone.utc)  # Fixed typo: timezo -> timezone
+                        last_updated=datetime.now(timezone.utc)
                     )
                 
                 return status_map
@@ -172,6 +174,12 @@ class MediaMTXService:
     
     async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
         logger.info("Cek semua status stream cctv...")
+        
+        # CEK KONEKSI INTERNET SERVER TERLEBIH DAHULU
+        has_internet = await self.check_server_internet_connection()
+        if not has_internet:
+            logger.error("Server tidak memiliki koneksi internet. SKIP semua pengecekan CCTV offline.")
+            return {}
         
         check_mediamtx = await self.test_mediamtx_connection()
         if not check_mediamtx:
@@ -195,9 +203,9 @@ class MediaMTXService:
         # Delay kecil untuk memastikan data MediaMTX up-to-date
         await asyncio.sleep(0.5)
     
-        # Ping dengan retry mechanism
+        # Ping dengan 3 paket sekaligus (tanpa retry mechanism)
         ping_tasks = {
-            cam.ip_address: asyncio.create_task(self._ping_ip(cam.ip_address, retries=2)) 
+            cam.ip_address: asyncio.create_task(self._ping_ip(cam.ip_address, ping_count=3)) 
             for cam in cctvs
         }
         ping_results = {ip: await task for ip, task in ping_tasks.items()}
@@ -241,52 +249,40 @@ class MediaMTXService:
                 status = StreamStatus.CONNECTING
                 self.cctv_repository.update_streaming_status(cam.id_cctv, True)
             
-            # OFFLINE: Dengan debouncing mechanism
+            # OFFLINE: Langsung tanpa counter/threshold
             elif ip_reachable is False and ping_status == "host_down":
-                # Increment fail counter
-                self._offline_detection_cache[cam.ip_address] = \
-                    self._offline_detection_cache.get(cam.ip_address, 0) + 1
+                status = StreamStatus.OFFLINE
                 
-                fail_count = self._offline_detection_cache[cam.ip_address]
+                latest_history = await asyncio.to_thread(
+                    self.history_repository.get_latest_by_cctv, 
+                    cam.id_cctv
+                )
                 
-                # Hanya set OFFLINE jika sudah gagal berturut-turut
-                if fail_count >= self._offline_threshold:
-                    status = StreamStatus.OFFLINE
+                # CEK COOLDOWN UNTUK HINDARI SPAM NOTIFIKASI
+                should_notify = True
+                if latest_history:
+                    time_diff = (datetime.now(timezone.utc) - latest_history.created_at).total_seconds() / 60
                     
-                    latest_history = await asyncio.to_thread(
-                        self.history_repository.get_latest_by_cctv, 
-                        cam.id_cctv
-                    )
+                    # Cooldown 10 menit untuk hindari spam
+                    if time_diff < 10:
+                        should_notify = False
+                        logger.debug(f"Cooldown aktif untuk {cam.ip_address}, skip notifikasi ({time_diff:.1f} menit)")
+                
+                # UPDATE DATABASE
+                self.cctv_repository.update_streaming_status(cam.id_cctv, False)
+                
+                # KIRIM NOTIFIKASI (meskipun CCTV baru atau belum pernah online)
+                if should_notify:
+                    try:
+                        result = await self.notification_service.create_notification(cctv_id=cam.id_cctv)
+                        if result.get("sent"):
+                            logger.info(f"✓ Notifikasi OFFLINE terkirim untuk CCTV {cam.titik_letak} (IP: {cam.ip_address})")
+                        else:
+                            logger.error(f"✗ Notifikasi gagal untuk CCTV {cam.ip_address}: {result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"Exception creating notification for {cam.ip_address}: {e}")
                     
-                    # Improved notification cooldown logic
-                    should_notify = True
-                    if latest_history:
-                        time_diff = (datetime.now(timezone.utc) - latest_history.created_at).total_seconds() / 60
-                        
-                        # Cooldown 10 menit untuk semua notifikasi (dinaikkan dari 5 menit)
-                        if time_diff < 10:
-                            should_notify = False
-                            logger.debug(f"Cooldown aktif untuk {cam.ip_address}, skip notifikasi ({time_diff:.1f} menit)")
-                    
-                    if should_notify:
-                        self.cctv_repository.update_streaming_status(cam.id_cctv, False)
-                        try:
-                            result = await self.notification_service.create_notification(cctv_id=cam.id_cctv)
-                            if result.get("sent"):
-                                logger.info(f"Notifikasi terkirim untuk CCTV {cam.titik_letak} (IP: {cam.ip_address})")
-                            else:
-                                logger.error(f"Notifikasi gagal untuk CCTV {cam.ip_address}: {result.get('error')}")
-                        except Exception as e:
-                            logger.error(f"Exception creating notification for {cam.ip_address}: {e}")
-                    else:
-                        # Tetap update status di database meski tidak kirim notifikasi
-                        self.cctv_repository.update_streaming_status(cam.id_cctv, False)
-                        
-                    logger.warning(f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) OFFLINE setelah {fail_count} kali pengecekan gagal")
-                else:
-                    # Masih dalam threshold, anggap CONNECTING untuk memberi kesempatan
-                    status = StreamStatus.CONNECTING
-                    logger.info(f"CCTV {cam.ip_address} ping gagal ({fail_count}/{self._offline_threshold}), masih dalam threshold")
+                logger.warning(f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) OFFLINE (3 paket ping gagal)")
                     
             else:
                 if ping_status == "network_unreachable":
