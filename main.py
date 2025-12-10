@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import asyncio
-
+from core.config import settings
 from database import engine, Base, SessionLocal
 from routes import (
     auth_route, cctv_route, mediamtx_route, 
@@ -51,15 +51,15 @@ async def lifespan(app: FastAPI):
     
     logger.info("Shutdown complete")
     
-# app = FastAPI(
-# title="CMS RSCH Management API",
-#  version="1.0.0",   
-# lifespan=lifespan
-# )
-app = FastAPI(title="CMS RSCH Management API", version="1.0.0")
+app = FastAPI(
+title="CMS RSCH Management API",
+ version="1.0.0",   
+lifespan=lifespan
+)
 origins = [
     "https://camera-management-system-rsch.vercel.app",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    f"{settings.IP_PC}"
 ]
 
 #CORSMiddleware 

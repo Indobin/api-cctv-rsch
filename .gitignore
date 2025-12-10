@@ -2,6 +2,7 @@
 .env
 .env.local
 .env*.local
+Dockerfile
 venv/
 _pycache_/
 # Juga abaikan file env contoh (opsional)

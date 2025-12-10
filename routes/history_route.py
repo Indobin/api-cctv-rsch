@@ -13,7 +13,7 @@ def get_history_service(db: Session = Depends(get_db)):
     user_repo = UserRepository(db)
     return HistoryService(history_repo, cctv_repo, user_repo)
 
-@router.get("/")
+@router.get("")
 def read_history(
     skip: int = 0,
     limit: int = 1000,
@@ -27,7 +27,7 @@ def read_history(
             data=response_data
     )
     
-@router.post("/")
+@router.post("")
 def create_history(
     history: HistoryCreate,
     service: HistoryService = Depends(get_history_service),

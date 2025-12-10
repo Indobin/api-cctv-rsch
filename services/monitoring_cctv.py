@@ -16,7 +16,7 @@ class BackgroundCCTVMonitor:
     
     def __init__(
         self,
-        check_interval: int = 40,
+        check_interval: int = 120,
         db_session_factory: Optional[Callable] = None
     ):
         self.check_interval = check_interval

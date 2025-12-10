@@ -11,7 +11,7 @@ class UserRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all(self, skip: int = 0, limit: int = 50):
+    def get_all(self, skip: int = 0, limit: int = 100):
         return (
             self.db.query(
                 User.id_user,

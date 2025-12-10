@@ -15,7 +15,7 @@ class UserService:
         self.user_repository = user_repository
         self.role_repository = role_repository
 
-    def get_all_users(self, skip: int = 0, limit: int = 50 ):
+    def get_all_users(self, skip: int = 0, limit: int = 100 ):
         return self.user_repository.get_all(skip, limit)
 
     def create_user(self, user: UserCreate):
@@ -169,21 +169,44 @@ class UserService:
 
 
     def import_users(self, rows: list[dict]):
-   
-       DEFAULT_PASSWORD = "Rsch123"
-   
-       usernames = [row["username"] for row in rows]
-       niks = [str(row["nik"]) for row in rows]
+        username_cek = {}
+        nik_cek = {}
 
-       existing_users = self.user_repository.get_existing_users_by_username_or_nik(usernames, niks)
-       users_by_username = {u.username: u for u in existing_users}
-       users_by_nik = {u.nik: u for u in existing_users}
+        for row in rows:
+            username = row["username"]
+            nik = row["nik"]
+
+            username_cek[username] = username_cek.get(username, 0) +1
+            nik_cek[nik] = nik_cek.get(nik, 0) +1
+        internal_errors = []
+        for username, count in username_cek.items():
+            if count > 1:
+                internal_errors.append(f"Duplikasi Username: {username} muncul {count} kali.")
+        for nik, count in nik_cek.items():
+            if count > 1:
+                internal_errors.append(f"Duplikasi Nik : {nik} muncul {count} kali.")
+
+        if internal_errors:
+            raise HTTPException(
+                status_code=400,
+               detail={
+                    "message": "Data tidak valid: Terdapat duplikasi di dalam file yang diunggah.",
+                    "errors": internal_errors
+                }
+            )
+        DEFAULT_PASSWORD = "Rsch123"
+        usernames = [row["username"] for row in rows]
+        niks = [str(row["nik"]) for row in rows]
+
+        existing_users = self.user_repository.get_existing_users_by_username_or_nik(usernames, niks)
+        users_by_username = {u.username: u for u in existing_users}
+        users_by_nik = {u.nik: u for u in existing_users}
    
-       users_to_create = []
-       users_to_update = []
-       passwords_to_hash = []
+        users_to_create = []
+        users_to_update = []
+        passwords_to_hash = []
    
-       for row in rows:
+        for row in rows:
            nik_str = str(row["nik"])
            username = row["username"]
            id_role = row["id_role"]
@@ -241,38 +264,38 @@ class UserService:
                })
                passwords_to_hash.append(final_password)
 
-       if not passwords_to_hash:
+        if not passwords_to_hash:
            return {"imported": [], "updated": []}
   
-       with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
            hashed_passwords = list(executor.map(hash_password, passwords_to_hash))
    
-       hash_idx = 0
+        hash_idx = 0
    
-       for update_item in users_to_update:
+        for update_item in users_to_update:
            update_item["data"]["password"] = hashed_passwords[hash_idx]
            hash_idx += 1
    
-       for user_data in users_to_create:
+        for user_data in users_to_create:
            user_data["password"] = hashed_passwords[hash_idx]
            hash_idx += 1
    
-       updated_users = []
-       for update_item in users_to_update:
+        updated_users = []
+        for update_item in users_to_update:
            user = update_item["user"]
            for field, value in update_item["data"].items():
                setattr(user, field, value)
            updated_users.append(user)
 
-       db_users = [User(**user_data) for user_data in users_to_create]
-       self.user_repository.db.add_all(db_users)
+        db_users = [User(**user_data) for user_data in users_to_create]
+        self.user_repository.db.add_all(db_users)
    
-       self.user_repository.db.commit()
+        self.user_repository.db.commit()
    
-       return {
+        return {
            "imported": db_users,
            "updated": updated_users
-       }
+        }
 
 
     

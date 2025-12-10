@@ -15,7 +15,7 @@ def get_user_service(db: Session = Depends(get_db)):
 @router.get("/", response_model=dict)
 def read_users(
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 100,
     service: UserService = Depends(get_user_service),
     user_role = Depends(superadmin_role)
 ):

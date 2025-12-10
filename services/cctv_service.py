@@ -95,7 +95,7 @@ class CctvService:
             "ip_address": cctv.ip_address,
             "id_location": create_location.id_location,
             "stream_key": None,
-            "is_streaming": False
+            "is_streaming": True
         }
 
         try:
@@ -223,7 +223,32 @@ class CctvService:
 
         
     def import_cctvs(self, rows: list[dict]):
+        ip_cek = {}
+        titik_cek = {}
 
+        for row in rows:
+            ip = row["ip_address"]
+            titik = row["titik_letak"]
+
+            ip_cek[ip] = ip_cek.get(ip, 0) + 1
+            titik_cek[titik] = titik_cek.get(titik, 0) +1
+        
+        internal_errors = []
+        for ip, count in ip_cek.items():
+            if count > 1:
+                internal_errors.append(f"Duplikasi IP : {ip} muncul {count} kali.")
+        for titik, count in titik_cek.items():
+            if count > 1:
+                internal_errors.append(f"Duplikasi Titik Letak : {titik} muncul {count} kali")
+
+        if internal_errors:
+            raise HTTPException(
+                status_code=400,
+               detail={
+                    "message": "Data tidak valid: Terdapat duplikasi di dalam file yang diunggah.",
+                    "errors": internal_errors
+                }
+            )
         create_cctvs = []
         update_cctvs = []
 
