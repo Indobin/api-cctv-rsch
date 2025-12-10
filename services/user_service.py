@@ -15,7 +15,7 @@ class UserService:
         self.user_repository = user_repository
         self.role_repository = role_repository
 
-    def get_all_users(self, skip: int = 0, limit: int = 50 ):
+    def get_all_users(self, skip: int = 0, limit: int = 100 ):
         return self.user_repository.get_all(skip, limit)
 
     def create_user(self, user: UserCreate):

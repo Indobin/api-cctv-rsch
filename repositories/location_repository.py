@@ -1,4 +1,4 @@
-from.base import Session, Location
+from.base import Session, Location, CctvCamera
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -6,8 +6,24 @@ class LocationRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all(self, skip: int=0, limit: int = 10):
-        return self.db.query(Location).where(Location.deleted_at == None).offset(skip).limit(limit).all()
+    def get_all(self, skip: int = 0, limit: int = 10):
+        sub = (
+            self.db.query(CctvCamera.id_location)
+            .filter(
+                CctvCamera.id_location == Location.id_location,
+                CctvCamera.titik_letak.ilike("Analog%")   # CCTV Analog
+            )
+        )
+
+        return (
+            self.db.query(Location)
+            .filter(Location.deleted_at == None)
+            .filter(~sub.exists())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
 
     def get_by_id(self, id_location: int):
         return self.db.query(Location).filter(Location.id_location == id_location).first()

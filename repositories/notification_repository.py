@@ -15,7 +15,7 @@ class NotificationRepository:
         self.db.refresh(notification)
         return notification
     
-    def get_by_user(self, user_id: int, limit: int = 50) -> List[Notification]:
+    def get_by_user(self, user_id: int, limit: int = 500) -> List[Notification]:
         return self.db.query(Notification).filter(
             Notification.id_user == user_id
         ).order_by(Notification.id_notification.desc()).limit(limit).all()

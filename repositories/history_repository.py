@@ -6,7 +6,7 @@ class HistoryRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all(self, skip: int = 0, limit: int = 50):
+    def get_all(self, skip: int = 0, limit: int = 500):
         return (
             self.db.query(
                 History.id_history,
@@ -60,7 +60,7 @@ class HistoryRepository:
             History.id_cctv == cctv_id
         ).order_by(History.created_at.desc()).first()
 
-    def get_by_cctv(self, cctv_id: int, limit: int = 50):
+    def get_by_cctv(self, cctv_id: int, limit: int = 500):
         return self.db.query(History).filter(
             History.id_cctv == cctv_id
         ).order_by(History.created_at.desc()).limit(limit).all()

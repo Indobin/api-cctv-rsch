@@ -7,7 +7,7 @@ class CctvRepository:
     def __init__(self, db:Session):
         self.db = db
 
-    def get_all(self, skip: int = 0, limit: int = 50):
+    def get_all(self, skip: int = 0, limit: int = 500):
         return(
             self.db.query(
                 CctvCamera.id_cctv,
@@ -29,7 +29,7 @@ class CctvRepository:
             .all()
     )
     
-    def get_all_stream(self, skip: int = 0, limit: int = 50):
+    def get_all_stream(self, skip: int = 0, limit: int = 500):
         return(
             self.db.query(
                 CctvCamera.id_cctv,

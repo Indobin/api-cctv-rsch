@@ -1,4 +1,4 @@
-from.base import APIRouter, Depends, Session, get_db, superadmin_role, success_response
+from.base import APIRouter, Depends, Session, get_db, superadmin_role, all_roles, success_response
 from.base import LocationRepository
 from schemas.location_schemas import LocationResponse, LocationCreate, LocationUpdate
 from services.location_service import LocationService
@@ -14,7 +14,7 @@ def read_location(
     skip: int = 0,
     limit: int = 50,
     service: LocationService = Depends(get_location_service),
-    user_role = Depends(superadmin_role)
+    user_role = Depends(all_roles)
 ):
     locations = service.get_all_location(skip, limit)
     response_data = [LocationResponse.from_orm(loc) for loc in locations]
