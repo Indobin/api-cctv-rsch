@@ -66,7 +66,8 @@ def export_history(
     service: HistoryService = Depends(get_history_service),
     user_role = Depends(all_roles)
 ):
-    result = service.export_history(start_date, end_date)
+    nama_user = user_role['nama']
+    result = service.export_history(start_date, end_date, nama_user)
     return StreamingResponse(
         content=result["data"],
         headers={"Content-Disposition": f"attachment; filename={result['filename']}"},

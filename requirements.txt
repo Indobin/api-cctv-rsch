@@ -13,4 +13,5 @@ openpyxl
 pydantic_settings==2.10.1
 requests==2.32.5
 httpx
-
+xlsxwriter
+pytz
