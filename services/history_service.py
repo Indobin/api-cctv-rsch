@@ -4,8 +4,9 @@ from repositories.user_repository import UserRepository
 from fastapi import HTTPException, status
 from datetime import date, datetime
 from io import BytesIO
+# from xlsxwriter import Workbook
 import pandas as pd
-
+import pytz
 from schemas.history_schemas import HistoryCreate, HistoryUpdate
 
 class HistoryService:
@@ -46,7 +47,8 @@ class HistoryService:
         db_history.cctv_name = db_cctv.titik_letak
         return db_history
         
-    def export_history(self, start_date: date, end_date: date):
+    def export_history(self, start_date: date, end_date: date, nama_user: str):
+        wib_tz = pytz.timezone('Asia/Jakarta')
         data = self.history_repo.get_all_fox_export(start_date, end_date)
         df = pd.DataFrame([dict(row._mapping) for row in data])
         if 'created_at' in df.columns:
@@ -64,13 +66,27 @@ class HistoryService:
             "note": "Catatan",
             "created_at": "Tanggal dan Waktu",
         }, inplace=True)
+        current_wib_time = datetime.now(wib_tz)
+        metadata = [
+            ["Laporan Kerusakan CCTV"],
+            [f"Periode: {start_date} sampai {end_date}"],
+            [f"Dibuat oleh: {nama_user}"],
+            [f"Tanggal Ekspor: {current_wib_time.strftime('%Y-%m-%d %H:%M:%S')}"],
+            ["", ""]
+        ]
 
-        unique_time = datetime.now().strftime("%Y%m%d%H%M%S") 
+        df_metadata = pd.DataFrame(metadata, columns=["Keterangan", "Nilai"])
+        # unique_time = datetime.now().strftime("%Y%m%d%H%M%S") 
             
         output = BytesIO() 
         
-        df.to_excel(output, index=False)
-        
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            sheet_name = "Laporan Kerusakan CCTV"
+            df_metadata.to_excel(writer, sheet_name=sheet_name, index=False, startrow=0, header=False)
+        # df.to_excel(output, index=False)
+            start_row = len(metadata) 
+
+            df.to_excel(writer, sheet_name=sheet_name, index=False, startrow=start_row)
         output.seek(0)
 
         return {

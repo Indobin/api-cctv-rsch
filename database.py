@@ -1,7 +1,8 @@
 from typing import Optional
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+
 from core.config import settings
 from dotenv import load_dotenv
 import subprocess
@@ -24,6 +25,8 @@ Base = declarative_base()
 def get_db():
     db = SessionLocal()
     try:
+        db.execute(text("SET TIMEZONE TO 'Asia/Jakarta'"))
+        db.commit()
         yield db
     finally:
         db.close()
