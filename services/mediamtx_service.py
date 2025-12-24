@@ -1,15 +1,13 @@
 import asyncio
-from annotated_types import Len
-from httpx import ConnectError, ReadTimeout, ConnectTimeout
-import subprocess
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
-from fastapi import HTTPException
 from contextlib import asynccontextmanager
 import logging
 from dataclasses import dataclass
 from enum import Enum
 import httpx
+import subprocess
+from httpx import ConnectError, ReadTimeout, ConnectTimeout
 from repositories.cctv_repository import CctvRepository
 from repositories.location_repository import LocationRepository
 from repositories.history_repository import HistoryRepository
@@ -23,8 +21,8 @@ class StreamStatus(str, Enum):
     OFFLINE = "offline"
     INACTIVE = "inactive"
     CONNECTING = "connecting"
-    ERROR = "error" 
-    
+    ERROR = "error"
+
 @dataclass
 class StreamInfo:
     stream_key: str
@@ -36,10 +34,10 @@ class StreamInfo:
     error_message: Optional[str] = None
 
 class MediaMTXService:
-    OFFLINE_THRESHOLD = 3           
-    PING_RETRY_WITHIN_CHECK = 2   
-    PING_RETRY_DELAY = 3           
-    _offline_counters: Dict[str, int] = {}
+    OFFLINE_THRESHOLD = 3
+    PING_RETRY_WITHIN_CHECK = 2
+    PING_RETRY_DELAY = 3
+    
     def __init__(self, cctv_repository: CctvRepository, history_repository: HistoryRepository, notification_service: NotificationService):
         self.rtsp_port = 8554
         self.http_port = 8888
@@ -49,9 +47,23 @@ class MediaMTXService:
         self._client: Optional[httpx.AsyncClient] = None
         self._connection_timeout = 5.0
         self._max_retries = 2
-      
-        # self._offline_counters: Dict[str, int] = {}
         
+        self._offline_counters: Dict[str, int] = {}
+        self._counter_lock = asyncio.Lock()
+        
+    async def _increment_offline_counter(self, ip: str) -> int:
+        async with self._counter_lock:
+            self._offline_counters[ip] = self._offline_counters.get(ip, 0) + 1
+            return self._offline_counters[ip]
+    
+    async def _reset_offline_counter(self, ip: str) -> Optional[int]:
+        async with self._counter_lock:
+            return self._offline_counters.pop(ip, None)
+    
+    async def _get_offline_counter(self, ip: str) -> int:
+        async with self._counter_lock:
+            return self._offline_counters.get(ip, 0)
+
     @asynccontextmanager
     async def _get_client(self):
         if self._client is None or self._client.is_closed:
@@ -70,7 +82,7 @@ class MediaMTXService:
             await self._client.aclose()
     
     async def check_server_internet_connection(self) -> bool:
-        test_hosts = ["8.8.8.8", "1.1.1.1"]  # Google DNS & Cloudflare DNS
+        test_hosts = ["8.8.8.8", "1.1.1.1"]
         
         for host in test_hosts:
             try:
@@ -82,17 +94,17 @@ class MediaMTXService:
                 await asyncio.wait_for(proc.communicate(), timeout=5.0)
                 
                 if proc.returncode == 0:
-                    logger.info(f"Server memiliki koneksi internet (ping ke {host} berhasil)")
+                    logger.debug(f"Server has internet connection via {host}")
                     return True
                     
             except asyncio.TimeoutError:
-                logger.warning(f"Timeout saat ping ke {host}")
+                logger.debug(f"Timeout pinging {host}")
                 continue
             except Exception as e:
-                logger.warning(f"Error saat ping ke {host}: {e}")
+                logger.debug(f"Error pinging {host}: {e}")
                 continue
         
-        logger.error("Server TIDAK memiliki koneksi internet! Skip pengecekan CCTV.")
+        logger.error("Server has no internet connection")
         return False
         
     async def test_notification(self):
@@ -106,7 +118,7 @@ class MediaMTXService:
                 response.raise_for_status() 
                 return response.status_code == 200
         except (ConnectError, ConnectTimeout, ReadTimeout) as e:
-            logger.error(f"Koneksi ke MediaMTX gagal: {e}")
+            logger.error(f"MediaMTX connection failed: {e}")
             return False
         except Exception as e:
             logger.error(f"MediaMTX API error: {e}")
@@ -145,7 +157,7 @@ class MediaMTXService:
                 return None, status
             
             if attempt < self.PING_RETRY_WITHIN_CHECK - 1:
-                logger.debug(f"Ping retry {attempt + 1}/{self.PING_RETRY_WITHIN_CHECK} untuk {ip}, tunggu {self.PING_RETRY_DELAY}s...")
+                logger.debug(f"Ping retry {attempt + 1}/{self.PING_RETRY_WITHIN_CHECK} for {ip}")
                 await asyncio.sleep(self.PING_RETRY_DELAY)
         
         return False, "host_down"
@@ -191,30 +203,29 @@ class MediaMTXService:
             return {}        
     
     async def _send_notification(self, cam) -> bool:
-
         try:
             result = await self.notification_service.create_notification(cctv_id=cam.id_cctv)
             if result.get("sent"):
-                logger.info(f"Notifikasi OFFLINE terkirim untuk CCTV {cam.titik_letak} (IP: {cam.ip_address})")
+                logger.info(f"Offline notification sent for CCTV {cam.titik_letak} IP {cam.ip_address}")
                 return True
             else:
-                logger.error(f"Notifikasi gagal untuk CCTV {cam.ip_address}: {result.get('error')}")
+                logger.error(f"Notification failed for CCTV {cam.ip_address}: {result.get('error')}")
                 return False
         except Exception as e:
             logger.error(f"Exception creating notification for {cam.ip_address}: {e}")
             return False
     
     async def get_all_streams_status(self, stream_keys: Optional[List[str]] = None) -> Dict[str, StreamInfo]:
-        logger.info("Cek semua status stream cctv...")
+        logger.debug("Starting CCTV status check")
         
         has_internet = await self.check_server_internet_connection()
         if not has_internet:
-            logger.error("Server tidak memiliki koneksi internet. SKIP semua pengecekan CCTV offline.")
+            logger.error("No internet connection, skipping CCTV checks")
             return {}
         
         check_mediamtx = await self.test_mediamtx_connection()
         if not check_mediamtx:
-            logger.warning("MediaMTX API tidak dapat diakses. Skip pemeriksaan status.")
+            logger.warning("MediaMTX unavailable, skipping checks")
             return {}
             
         cctvs = self.cctv_repository.get_all_stream()
@@ -223,22 +234,19 @@ class MediaMTXService:
             StreamStatus.ACTIVE: 0,
             StreamStatus.CONNECTING: 0,
             StreamStatus.OFFLINE: 0,
-            StreamStatus.INACTIVE: 0, 
+            StreamStatus.INACTIVE: 0,
         }
         
-        logger.info(f"Melakukan ping ke {len(cctvs)} CCTV dengan retry mechanism...")
+        logger.debug(f"Pinging {len(cctvs)} CCTVs with retry mechanism")
         ping_tasks = {
             cam.ip_address: asyncio.create_task(self._ping_ip_with_retry(cam.ip_address)) 
             for cam in cctvs
         }
         ping_results = {ip: await task for ip, task in ping_tasks.items()}
-        logger.info("Ping selesai, mengambil data MediaMTX...")
         
         async with self._get_client() as client:
             response = await client.get(f"{settings.MEDIAMTX_API}/paths/list")
             data = response.json() if response.status_code == 200 else {"items": []}
-        
-        logger.info("Data MediaMTX berhasil diambil, evaluasi status...")
     
         for cam in cctvs:
             ip_reachable, ping_status = ping_results.get(cam.ip_address, (None, "unknown"))
@@ -249,16 +257,13 @@ class MediaMTXService:
                 None
             )
             
-            
             if stream_data and stream_data.get("ready", False):
                 status = StreamStatus.ACTIVE
                 
-                # Reset counter karena stream sudah active
-                if cam.ip_address in self._offline_counters:
-                    prev_count = self._offline_counters.pop(cam.ip_address)
-                    logger.info(f"✓ Reset offline counter untuk {cam.ip_address} (ACTIVE, sebelumnya: {prev_count})")
+                prev_count = await self._reset_offline_counter(cam.ip_address)
+                if prev_count:
+                    logger.info(f"CCTV {cam.titik_letak} IP {cam.ip_address} back online, was down {prev_count} times")
                 
-                # Update history jika sebelumnya offline
                 latest_history = await asyncio.to_thread(
                     self.history_repository.get_latest_by_cctv, 
                     cam.id_cctv
@@ -276,55 +281,55 @@ class MediaMTXService:
                             cam.id_cctv,
                             True
                         )
-                        logger.info(f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) kembali ONLINE")
                     except Exception as e:
                         logger.error(f"Failed to update service status for {cam.stream_key}: {e}")
+                else:
+                    await asyncio.to_thread(
+                        self.cctv_repository.update_streaming_status,
+                        cam.id_cctv,
+                        True
+                    )
 
             elif ip_reachable is False and ping_status == "host_down":
-                current_count = self._offline_counters.get(cam.ip_address, 0) + 1
-                self._offline_counters[cam.ip_address] = current_count
+                current_count = await self._increment_offline_counter(cam.ip_address)
                 
                 logger.warning(
-                    f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) tidak merespons ping "
+                    f"CCTV {cam.titik_letak} IP {cam.ip_address} not responding "
                     f"({current_count}/{self.OFFLINE_THRESHOLD} checks)"
                 )
                 
-                # Cek apakah sudah mencapai threshold
                 if current_count >= self.OFFLINE_THRESHOLD:
                     status = StreamStatus.OFFLINE
                     
-                    # Update database
                     await asyncio.to_thread(
                         self.cctv_repository.update_streaming_status,
                         cam.id_cctv, 
                         False
                     )
                     
-                    # Kirim notifikasi
                     await self._send_notification(cam)
                     
                     logger.error(
-                        f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) CONFIRMED OFFLINE "
-                        f"(gagal {self.OFFLINE_THRESHOLD}x pengecekan berturut-turut)"
+                        f"CCTV {cam.titik_letak} IP {cam.ip_address} confirmed offline "
+                        f"after {self.OFFLINE_THRESHOLD} consecutive failures"
                     )
                 else:
                     status = StreamStatus.CONNECTING
-                    logger.info(
-                        f"CCTV {cam.titik_letak} (IP: {cam.ip_address}) dalam verifikasi offline "
+                    logger.debug(
+                        f"CCTV {cam.titik_letak} IP {cam.ip_address} in verification "
                         f"({current_count}/{self.OFFLINE_THRESHOLD})"
                     )
             
             elif ip_reachable is True:
                 status = StreamStatus.CONNECTING
                 
-                if cam.ip_address in self._offline_counters:
-                    prev_count = self._offline_counters.pop(cam.ip_address)
+                prev_count = await self._reset_offline_counter(cam.ip_address)
+                if prev_count:
                     logger.info(
-                        f"✓ Reset offline counter untuk {cam.ip_address} "
-                        f"(IP reachable, sebelumnya: {prev_count})"
+                        f"CCTV {cam.titik_letak} IP {cam.ip_address} IP reachable again, "
+                        f"was down {prev_count} times"
                     )
                 
-                # Update streaming status jika masih reachable
                 await asyncio.to_thread(
                     self.cctv_repository.update_streaming_status,
                     cam.id_cctv, 
@@ -333,13 +338,13 @@ class MediaMTXService:
             
             elif ping_status == "network_unreachable":
                 logger.warning(
-                    f"🌐 Network unreachable ke {cam.ip_address}, "
-                    f"skip update (kemungkinan masalah jaringan server)"
+                    f"Network unreachable to {cam.ip_address}, "
+                    f"skipping update, possible server network issue"
                 )
                 status = StreamStatus.INACTIVE
             else:
                 status = StreamStatus.INACTIVE
-                logger.debug(f"CCTV {cam.ip_address} dalam status INACTIVE")
+                logger.debug(f"CCTV {cam.ip_address} in INACTIVE status")
             
             status_counts[status] += 1
             status_map[cam.stream_key] = StreamInfo(
@@ -351,25 +356,21 @@ class MediaMTXService:
                 last_updated=datetime.now(timezone.utc)
             )
 
-        # Log summary
         logger.info(
-            f"📊 Summary - Total: {len(cctvs)} | "
+            f"Check complete - Total: {len(cctvs)} | "
             f"Active: {status_counts[StreamStatus.ACTIVE]} | "
             f"Connecting: {status_counts[StreamStatus.CONNECTING]} | "
             f"Offline: {status_counts[StreamStatus.OFFLINE]} | "
             f"Inactive: {status_counts[StreamStatus.INACTIVE]}"
         )
 
-        # Log offline counters yang sedang aktif
-        if self._offline_counters:
-            counter_info = ", ".join([f"{ip}={count}" for ip, count in self._offline_counters.items()])
-            logger.info(f"Monitoring offline counters: {counter_info}")
-        else:
-            logger.info("Tidak ada CCTV dalam monitoring offline")
+        async with self._counter_lock:
+            if self._offline_counters:
+                counter_info = ", ".join([f"{ip}={count}" for ip, count in self._offline_counters.items()])
+                logger.debug(f"Monitoring offline counters: {counter_info}")
             
         return status_map
 
-        
     async def add_stream_to_mediamtx(self, stream_key: str, rtsp_source_url: str) -> bool:
         path_config = {
             "source": rtsp_source_url,
@@ -388,13 +389,13 @@ class MediaMTXService:
                     )
                 
                 if response.status_code == 200:
-                    logger.info(f"Stream {stream_key} berhasil dibuat")
+                    logger.info(f"Stream {stream_key} created successfully")
                     return True
                 elif response.status_code == 409:
-                    logger.info(f"Stream {stream_key} sudah ada")
+                    logger.info(f"Stream {stream_key} already exists")
                     return True
                 else:
-                    logger.warning(f"Gagal membuat stream {stream_key}: {response.text}")
+                    logger.warning(f"Failed to create stream {stream_key}: {response.text}")
                     
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed for {stream_key}: {e}")
@@ -410,7 +411,7 @@ class MediaMTXService:
                     f"{settings.MEDIAMTX_API}/config/paths/get/{stream_key}",
                 )
             if response.status_code == 200:
-                logger.info(f"Stream {stream_key} sudah ada")
+                logger.debug(f"Stream {stream_key} already exists")
                 return True
             elif response.status_code == 404:
                 return await self.add_stream_to_mediamtx(stream_key, rtsp_source_url)
